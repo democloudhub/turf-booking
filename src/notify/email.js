@@ -72,7 +72,14 @@ async function sendBookingEmail(booking) {
     </div>
   `;
 
-  return sendMail({ to: booking.email, subject, text, html, channel: 'email' });
+  return sendMail({
+    to: booking.email,
+    subject,
+    text,
+    html,
+    channel: 'email',
+    bypassFlag: true
+  });
 }
 
 async function sendCancellationEmail(booking, reason) {
@@ -117,7 +124,14 @@ async function sendCancellationEmail(booking, reason) {
     </div>
   `;
 
-  return sendMail({ to: booking.email, subject, text, html, channel: 'email' });
+  return sendMail({
+    to: booking.email,
+    subject,
+    text,
+    html,
+    channel: 'email',
+    bypassFlag: true
+  });
 }
 
 async function sendAdminBookingEmail(booking) {
@@ -180,7 +194,8 @@ async function sendAdminBookingEmail(booking) {
 }
 
 async function sendMail({ to, subject, text, html, channel, bypassFlag = false }) {
-  // Customer notifications respect NOTIFY_ENABLED; admin alerts send whenever SMTP works.
+  // Emails (customer + admin) send whenever SMTP is configured.
+  // SMS/WhatsApp still use notificationsEnabled() in their own senders.
   if (!bypassFlag && !notificationsEnabled()) {
     console.log(`[${channel} skipped]`, { to, subject });
     return { skipped: true, channel };
