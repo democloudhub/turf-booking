@@ -1,4 +1,3 @@
-const { createClient } = require('@libsql/client');
 const path = require('path');
 const fs = require('fs');
 
@@ -38,6 +37,23 @@ function resolveUrl() {
   return url;
 }
 
+function createDbClient(url) {
+  const opts = { url };
+  if (process.env.TURSO_AUTH_TOKEN) {
+    opts.authToken = process.env.TURSO_AUTH_TOKEN;
+  }
+
+  // Local file DB needs the Node driver. Remote Turso on Vercel must use the
+  // HTTP `/web` client — the default TCP path times out from serverless.
+  if (url.startsWith('file:')) {
+    const { createClient } = require('@libsql/client');
+    return createClient(opts);
+  }
+
+  const { createClient } = require('@libsql/client/web');
+  return createClient(opts);
+}
+
 let client;
 let resolveError = null;
 
@@ -45,12 +61,7 @@ function getDb() {
   if (resolveError) throw resolveError;
   if (!client) {
     try {
-      const url = resolveUrl();
-      const opts = { url };
-      if (process.env.TURSO_AUTH_TOKEN) {
-        opts.authToken = process.env.TURSO_AUTH_TOKEN;
-      }
-      client = createClient(opts);
+      client = createDbClient(resolveUrl());
     } catch (err) {
       resolveError = err;
       throw err;

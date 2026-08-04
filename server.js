@@ -19,6 +19,14 @@ const ready = ensureSchema().catch((err) => {
 
 function configErrorPage(err) {
   const message = err && err.message ? err.message : 'Database configuration error';
+  const isFetch =
+    /fetch failed|ETIMEDOUT|ECONNREFUSED|ENOTFOUND/i.test(message) ||
+    (err && err.cause && /ETIMEDOUT|ECONNREFUSED|ENOTFOUND/i.test(String(err.cause.code || err.cause.message || '')));
+  const tip = isFetch
+    ? `<p><strong>Connection tip:</strong> Env vars are present, but Vercel could not reach Turso.
+       Confirm <code>TURSO_DATABASE_URL</code> / <code>TURSO_AUTH_TOKEN</code>, and that the app uses
+       <code>@libsql/client/web</code> (HTTP) with a region near your Turso DB.</p>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Setup required</title>
 <style>body{font-family:system-ui,sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#142018}
@@ -28,6 +36,7 @@ code{background:#f3f6f1;padding:.15rem .35rem;border-radius:4px}
 <h1>Turf Booking needs Turso on Vercel</h1>
 <div class="box">
 <p>${message.replace(/</g, '&lt;')}</p>
+${tip}
 <ol>
 <li>Create a free DB at <a href="https://turso.tech">turso.tech</a></li>
 <li>In Vercel → Project → Settings → Environment Variables, add:
