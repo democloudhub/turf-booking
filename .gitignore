@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+*.db
+*.db-*
+.DS_Store
+.vercel
+data/local.db
+data/local.db-*
+npm-debug.log*
+npm-log.txt
+.env.example.bak
+receipt.pdf
+*.pdf
+!public/**/*.pdf
+.idea/
+.vscode/

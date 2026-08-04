@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Availability — Turf Booking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-turf">
+    <div class="container">
+      <a class="navbar-brand display-font" href="/" data-venue-name>GreenField Turf</a>
+      <div class="d-flex gap-3 align-items-center" data-auth-nav></div>
+    </div>
+  </nav>
+
+  <main class="section">
+    <div class="container">
+      <h1 class="section-title">Availability</h1>
+      <p class="section-lead">Pick a date to see open and booked hourly slots with live pricing.</p>
+
+      <div class="form-panel mb-4">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label" for="dateInput">Date</label>
+            <input type="date" id="dateInput" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <div id="priceInfo" class="price-badge">Select a date</div>
+          </div>
+          <div class="col-md-4 text-md-end">
+            <button id="refreshBtn" class="btn btn-turf">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="alertBox"></div>
+      <div id="slotGrid" class="slot-grid"></div>
+
+      <div class="mt-4 d-flex gap-3 small text-muted">
+        <span><span class="badge text-bg-success">&nbsp;</span> Available</span>
+        <span><span class="badge text-bg-secondary">&nbsp;</span> Booked</span>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/availability.js"></script>
+</body>
+</html>
