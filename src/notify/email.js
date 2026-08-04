@@ -36,6 +36,11 @@ function bookingSummary(booking, venue) {
 async function sendBookingEmail(booking) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
+  const appUrl = process.env.APP_URL || 'http://localhost:3000';
+  const { generateQrDataUrl } = require('../receipt');
+  const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
+  const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64');
+
   const subject = `Booking Confirmed — ${info.bookingId} | ${info.venueName}`;
   const text = [
     `Hi ${info.name},`,
@@ -51,6 +56,7 @@ async function sendBookingEmail(booking) {
     `Contact: ${info.phone}`,
     '',
     'Please show your QR code / Booking ID at check-in.',
+    `Confirmation page: ${appUrl.replace(/\/$/, '')}/confirmation?id=${info.bookingId}`,
     '',
     `— ${info.venueName}`
   ].join('\n');
@@ -67,7 +73,12 @@ async function sendBookingEmail(booking) {
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.slot)}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Amount</strong></td><td style="padding:8px;border:1px solid #ddd">₹${info.amount}</td></tr>
       </table>
-      <p>Please show your QR code / Booking ID at check-in.</p>
+      <div style="text-align:center;margin:20px 0;padding:16px;border:1px solid #c8e6c9;border-radius:8px;background:#f7fbf7">
+        <p style="margin:0 0 10px;font-weight:700;color:#1b5e20">Check-in QR Code</p>
+        <img src="cid:booking-qr" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto" />
+        <p style="margin:10px 0 0;color:#555;font-size:13px">Show this QR or Booking ID at the venue</p>
+      </div>
+      <p><a href="${escapeHtml(appUrl.replace(/\/$/, ''))}/confirmation?id=${escapeHtml(info.bookingId)}">Open confirmation page</a></p>
       <p style="color:#555">— ${escapeHtml(info.venueName)} · ${escapeHtml(info.phone)}</p>
     </div>
   `;
@@ -78,7 +89,15 @@ async function sendBookingEmail(booking) {
     text,
     html,
     channel: 'email',
-    bypassFlag: true
+    bypassFlag: true,
+    attachments: [
+      {
+        filename: `qr-${booking.id}.png`,
+        content: qrBuffer,
+        cid: 'booking-qr',
+        contentType: 'image/png'
+      }
+    ]
   });
 }
 
@@ -193,7 +212,7 @@ async function sendAdminBookingEmail(booking) {
   });
 }
 
-async function sendMail({ to, subject, text, html, channel, bypassFlag = false }) {
+async function sendMail({ to, subject, text, html, channel, bypassFlag = false, attachments = [] }) {
   // Emails (customer + admin) send whenever SMTP is configured.
   // SMS/WhatsApp still use notificationsEnabled() in their own senders.
   if (!bypassFlag && !notificationsEnabled()) {
@@ -212,7 +231,8 @@ async function sendMail({ to, subject, text, html, channel, bypassFlag = false }
     to,
     subject,
     text,
-    html
+    html,
+    attachments
   });
   return { ok: true, channel };
 }
