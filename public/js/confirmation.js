@@ -1,25 +1,45 @@
 (async function () {
-  const { api, qs, formatMoney, loadVenueIntoPage, showAlert, renderAuthNav } = TurfApp;
+  const { api, qs, formatMoney, loadVenueIntoPage, showAlert, requireLoginOrRedirect, renderAuthNav } = TurfApp;
   await loadVenueIntoPage();
-  await renderAuthNav();
 
   const id = qs('id');
   const alertBox = document.getElementById('alertBox');
   const card = document.getElementById('confirmCard');
 
   if (!id) {
+    await renderAuthNav();
     showAlert(alertBox, 'Missing booking ID.');
     return;
   }
 
+  const next = `/confirmation?id=${encodeURIComponent(id)}`;
+  const user = await requireLoginOrRedirect(next);
+  if (!user) return;
+  await renderAuthNav();
+
   try {
     const cached = sessionStorage.getItem(`booking:${id}`);
     let data = cached ? JSON.parse(cached) : null;
-    if (!data) {
+    if (!data || !data.booking || data.booking.userId !== user.id) {
       data = await api(`/api/bookings/${encodeURIComponent(id)}`);
+      sessionStorage.setItem(`booking:${id}`, JSON.stringify(data));
     }
 
     const b = data.booking;
+    let statusClass = 'confirmed';
+    let statusLabel = 'Confirmed';
+    if (b.status === 'cancelled') {
+      statusClass = 'cancelled';
+      statusLabel = 'Cancelled';
+    } else if (b.checkedIn) {
+      statusClass = 'checked-in';
+      statusLabel = 'Checked-In';
+    }
+
+    const statusEl = document.getElementById('bookingStatus');
+    statusEl.className = `status-block status-block-lg ${statusClass}`;
+    statusEl.textContent = statusLabel;
+
     document.getElementById('bookingId').textContent = b.id;
     document.getElementById('cName').textContent = b.name;
     document.getElementById('cDate').textContent = b.bookingDate;
@@ -28,6 +48,18 @@
     document.getElementById('cMobile').textContent = b.mobile;
     document.getElementById('qrImage').src = data.qrDataUrl;
     document.getElementById('pdfBtn').href = `/api/bookings/${encodeURIComponent(b.id)}/receipt.pdf`;
+
+    const qrWrap = document.getElementById('qrWrap');
+    const pdfBtn = document.getElementById('pdfBtn');
+    if (b.status === 'cancelled') {
+      qrWrap.hidden = true;
+      pdfBtn.hidden = true;
+      document.getElementById('confirmHint').textContent = 'This booking was cancelled.';
+    } else if (b.checkedIn) {
+      document.getElementById('confirmHint').textContent = 'Checked in at the venue.';
+    } else {
+      document.getElementById('confirmHint').textContent = 'Show this QR code at the venue for check-in.';
+    }
 
     if (data.notifications) {
       const parts = data.notifications.map((n) => {

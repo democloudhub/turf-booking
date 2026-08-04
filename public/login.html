@@ -20,8 +20,7 @@
 
   <main class="section">
     <div class="container" style="max-width:480px">
-      <h1 class="section-title">Customer Login</h1>
-      <p class="section-lead">Sign in or create an account to book a slot. Venue staff use <a href="/admin">Admin</a>.</p>
+      <h1 class="section-title">Sign in to book</h1>
 
       <div id="alertBox"></div>
 
@@ -58,6 +57,10 @@
         <div class="mb-3">
           <label class="form-label" for="regPassword">Password</label>
           <input type="password" id="regPassword" class="form-control" required minlength="6">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="regPasswordConfirm">Confirm password</label>
+          <input type="password" id="regPasswordConfirm" class="form-control" required minlength="6">
         </div>
         <button class="btn btn-turf w-100" type="submit">Create account</button>
       </form>

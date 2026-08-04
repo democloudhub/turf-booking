@@ -14,7 +14,7 @@
   } = TurfApp;
 
   await loadVenueIntoPage();
-  const user = await requireLoginOrRedirect();
+  const user = await requireLoginOrRedirect(`/book${window.location.search}`);
   if (!user) return;
   await renderAuthNav();
 

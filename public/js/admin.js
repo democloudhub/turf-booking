@@ -1,17 +1,20 @@
 (async function () {
-  const { api, formatMoney, showAlert, escapeHtml } = TurfApp;
+  const { api, formatMoney, showAlert, escapeHtml, isValidMobile, bindMobileInput, normalizeMobileInput } = TurfApp;
 
   const alertBox = document.getElementById('alertBox');
   const loginPanel = document.getElementById('loginPanel');
   const adminPanel = document.getElementById('adminPanel');
   const logoutBtn = document.getElementById('logoutBtn');
+  const adminNavName = document.getElementById('adminNavName');
   let currentCheckinId = null;
+
+  bindMobileInput(document.getElementById('adminMobile'));
 
   async function checkAuth() {
     try {
-      await api('/api/admin/me');
-      showAdmin();
-      await Promise.all([loadBookings(), loadVenueForm(), refreshPushStatus()]);
+      const me = await api('/api/admin/me');
+      showAdmin(me.profile);
+      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), refreshPushStatus()]);
       return true;
     } catch {
       showLogin();
@@ -23,12 +26,21 @@
     loginPanel.hidden = false;
     adminPanel.hidden = true;
     logoutBtn.hidden = true;
+    if (adminNavName) {
+      adminNavName.hidden = true;
+      adminNavName.textContent = '';
+    }
   }
 
-  function showAdmin() {
+  function showAdmin(profile) {
     loginPanel.hidden = true;
     adminPanel.hidden = false;
     logoutBtn.hidden = false;
+    if (adminNavName) {
+      const name = profile && profile.name ? profile.name : '';
+      adminNavName.textContent = name;
+      adminNavName.hidden = !name;
+    }
   }
 
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -39,8 +51,9 @@
         method: 'POST',
         body: JSON.stringify({ password: document.getElementById('password').value })
       });
-      showAdmin();
-      await Promise.all([loadBookings(), loadVenueForm(), refreshPushStatus()]);
+      const me = await api('/api/admin/me');
+      showAdmin(me.profile);
+      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), refreshPushStatus()]);
     } catch (err) {
       showAlert(alertBox, err.message);
     }
@@ -56,10 +69,47 @@
       document.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
-      ['bookings', 'checkin', 'venue', 'security', 'notifications'].forEach((name) => {
+      ['bookings', 'checkin', 'venue', 'profile', 'security', 'notifications'].forEach((name) => {
         document.getElementById(`tab-${name}`).hidden = name !== tab;
       });
     });
+  });
+
+  async function loadProfileForm(profile) {
+    const data = profile || (await api('/api/admin/profile'));
+    const form = document.getElementById('profileForm');
+    form.name.value = data.name || '';
+    form.email.value = data.email || '';
+    form.mobile.value = normalizeMobileInput(data.mobile || '');
+    if (adminNavName) {
+      adminNavName.textContent = data.name || '';
+      adminNavName.hidden = !data.name;
+    }
+  }
+
+  document.getElementById('profileForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertBox.innerHTML = '';
+    const form = e.target;
+    const mobile = form.mobile.value.trim();
+    if (mobile && !isValidMobile(mobile)) {
+      showAlert(alertBox, 'Mobile number must be exactly 10 digits.');
+      return;
+    }
+    try {
+      const profile = await api('/api/admin/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: form.name.value.trim(),
+          email: form.email.value.trim(),
+          mobile
+        })
+      });
+      await loadProfileForm(profile);
+      showAlert(alertBox, 'Admin profile saved. Booking emails will go to this address.', 'success');
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    }
   });
 
   async function loadBookings() {

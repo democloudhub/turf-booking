@@ -5,7 +5,7 @@ const {
   createBooking
 } = require('../bookings');
 const { findUserById, mapUser } = require('../users');
-const { requireUser, optionalUser } = require('../auth');
+const { requireUser } = require('../auth');
 const { sendAllConfirmations, notifyAdminNewBooking } = require('../notify');
 const { generateQrDataUrl, buildReceiptPdf } = require('../receipt');
 
@@ -59,16 +59,14 @@ router.post('/', requireUser, async (req, res) => {
   }
 });
 
-router.get('/:id', optionalUser, async (req, res) => {
+router.get('/:id', requireUser, async (req, res) => {
   try {
     const booking = await getBookingById(req.params.id);
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
-    const isOwner = req.user && booking.userId === req.user.userId;
-    if (booking.userId && !isOwner) {
-      // Allow confirmation page right after booking via same browser session cache;
-      // still return limited public fields for QR verify use-cases from staff tools.
+    if (booking.userId && booking.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Not allowed to view this booking' });
     }
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
     const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);

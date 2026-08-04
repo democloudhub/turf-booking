@@ -1,6 +1,6 @@
 const webpush = require('web-push');
 const { getDb } = require('../db');
-const { getSetting, setSetting } = require('../settings');
+const { getSetting, setSetting, getAdminProfile } = require('../settings');
 const { slotLabel } = require('../venue');
 
 async function ensureVapidKeys() {
@@ -22,7 +22,13 @@ async function ensureVapidKeys() {
     }
   }
 
-  const subject = process.env.VAPID_SUBJECT || process.env.ADMIN_EMAIL || process.env.SMTP_USER || 'mailto:admin@turf-booking.local';
+  const profile = await getAdminProfile();
+  const subject =
+    process.env.VAPID_SUBJECT ||
+    (profile.email ? `mailto:${profile.email}` : null) ||
+    process.env.ADMIN_EMAIL ||
+    process.env.SMTP_USER ||
+    'mailto:admin@turf-booking.local';
   webpush.setVapidDetails(subject.startsWith('mailto:') ? subject : `mailto:${subject}`, publicKey, privateKey);
   return { publicKey, privateKey };
 }

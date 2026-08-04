@@ -156,13 +156,16 @@ async function sendCancellationEmail(booking, reason) {
 async function sendAdminBookingEmail(booking) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
+  const { getAdminProfile } = require('../settings');
+  const profile = await getAdminProfile();
   const to =
+    profile.email ||
     process.env.ADMIN_EMAIL ||
     venue.contactEmail ||
     process.env.SMTP_USER;
 
   if (!to) {
-    console.warn('[admin-email] ADMIN_EMAIL / venue contact / SMTP_USER not set');
+    console.warn('[admin-email] Admin profile email / ADMIN_EMAIL / venue contact / SMTP_USER not set');
     return { skipped: true, channel: 'admin-email', reason: 'no_admin_email' };
   }
 

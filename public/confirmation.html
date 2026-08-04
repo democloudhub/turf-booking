@@ -22,10 +22,14 @@
     <div class="container" style="max-width:640px">
       <div id="alertBox"></div>
       <div class="confirm-card" id="confirmCard" hidden>
-        <div class="text-success fw-bold mb-2">Booking Confirmed</div>
+        <div class="mb-3">
+          <span class="status-block status-block-lg confirmed" id="bookingStatus">Confirmed</span>
+        </div>
         <h1 class="section-title mb-1" id="bookingId">—</h1>
-        <p class="text-muted mb-3">Show this QR code at the venue for check-in.</p>
-        <img class="qr" id="qrImage" alt="Booking QR code">
+        <p class="text-muted mb-3" id="confirmHint">Show this QR code at the venue for check-in.</p>
+        <div id="qrWrap">
+          <img class="qr" id="qrImage" alt="Booking QR code">
+        </div>
         <div class="text-start mt-3 mb-4">
           <p class="mb-1"><strong>Name:</strong> <span id="cName"></span></p>
           <p class="mb-1"><strong>Date:</strong> <span id="cDate"></span></p>

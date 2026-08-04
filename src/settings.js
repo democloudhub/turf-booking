@@ -54,10 +54,81 @@ async function changeAdminPassword(currentPassword, newPassword) {
   return true;
 }
 
+function normalizeAdminMobile(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.slice(0, 10);
+}
+
+async function ensureAdminProfileSeeded() {
+  const [name, email, mobile] = await Promise.all([
+    getSetting('admin_name'),
+    getSetting('admin_email'),
+    getSetting('admin_mobile')
+  ]);
+  if (!name && process.env.ADMIN_NAME) {
+    await setSetting('admin_name', String(process.env.ADMIN_NAME).trim());
+  }
+  if (!email && (process.env.ADMIN_EMAIL || process.env.SMTP_USER)) {
+    await setSetting(
+      'admin_email',
+      String(process.env.ADMIN_EMAIL || process.env.SMTP_USER).trim()
+    );
+  }
+  if (!mobile && process.env.ADMIN_MOBILE) {
+    await setSetting('admin_mobile', normalizeAdminMobile(process.env.ADMIN_MOBILE));
+  }
+}
+
+async function getAdminProfile() {
+  await ensureAdminProfileSeeded();
+  const [name, email, mobile] = await Promise.all([
+    getSetting('admin_name'),
+    getSetting('admin_email'),
+    getSetting('admin_mobile')
+  ]);
+  return {
+    name: name || '',
+    email: email || '',
+    mobile: mobile || ''
+  };
+}
+
+async function updateAdminProfile({ name, email, mobile }) {
+  const nextName = String(name || '').trim();
+  const nextEmail = String(email || '').trim().toLowerCase();
+  const nextMobile = normalizeAdminMobile(mobile);
+
+  if (!nextName) {
+    const err = new Error('Admin name is required');
+    err.status = 400;
+    throw err;
+  }
+  if (!nextEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+    const err = new Error('A valid admin email is required');
+    err.status = 400;
+    throw err;
+  }
+  if (nextMobile && nextMobile.length !== 10) {
+    const err = new Error('Mobile number must be exactly 10 digits');
+    err.status = 400;
+    throw err;
+  }
+
+  await Promise.all([
+    setSetting('admin_name', nextName),
+    setSetting('admin_email', nextEmail),
+    setSetting('admin_mobile', nextMobile)
+  ]);
+  return getAdminProfile();
+}
+
 module.exports = {
   getSetting,
   setSetting,
   ensureAdminPasswordSeeded,
+  ensureAdminProfileSeeded,
   verifyAdminPassword,
-  changeAdminPassword
+  changeAdminPassword,
+  getAdminProfile,
+  updateAdminProfile
 };

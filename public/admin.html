@@ -14,7 +14,10 @@
   <nav class="navbar navbar-turf">
     <div class="container">
       <a class="navbar-brand display-font" href="/">Turf Admin</a>
-      <button id="logoutBtn" class="btn btn-sm btn-outline-light" hidden>Logout</button>
+      <div class="d-flex align-items-center gap-2">
+        <span id="adminNavName" class="text-white small" hidden></span>
+        <button id="logoutBtn" class="btn btn-sm btn-outline-light" hidden>Logout</button>
+      </div>
     </div>
   </nav>
 
@@ -23,7 +26,7 @@
 
     <section id="loginPanel" class="form-panel mx-auto" style="max-width:420px">
       <h1 class="section-title h3">Admin Login</h1>
-      <p class="text-muted">Staff only. Customers should use <a href="/login">Customer Login</a>.</p>
+      <p class="text-muted">Staff only. Customers should use <a href="/book">Book</a>.</p>
       <form id="loginForm">
         <label class="form-label" for="password">Password</label>
         <input type="password" id="password" class="form-control mb-3" required>
@@ -36,6 +39,7 @@
         <li class="nav-item"><button class="nav-link active" data-tab="bookings" type="button">Bookings</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="checkin" type="button">QR Check-in</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="venue" type="button">Venue &amp; Pricing</button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="profile" type="button">Profile</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="security" type="button">Password</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="notifications" type="button">Notifications</button></li>
       </ul>
@@ -143,6 +147,27 @@
         </form>
       </div>
 
+      <div id="tab-profile" hidden>
+        <form id="profileForm" class="form-panel" style="max-width:520px">
+          <h2 class="h4 mb-3">Admin Profile</h2>
+          <p class="text-muted">Used for staff identity. New booking emails are sent to this email address.</p>
+          <div class="mb-3">
+            <label class="form-label" for="adminName">Name</label>
+            <input id="adminName" name="name" class="form-control" required maxlength="80">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="adminEmail">Email</label>
+            <input type="email" id="adminEmail" name="email" class="form-control" required>
+            <div class="form-text">Booking alert emails are delivered here.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="adminMobile">Mobile</label>
+            <input id="adminMobile" name="mobile" class="form-control" pattern="\d{10}" maxlength="10" inputmode="numeric" placeholder="10-digit mobile">
+          </div>
+          <button class="btn btn-turf" type="submit">Save profile</button>
+        </form>
+      </div>
+
       <div id="tab-security" hidden>
         <form id="passwordForm" class="form-panel" style="max-width:480px">
           <h2 class="h4 mb-3">Change Admin Password</h2>
@@ -180,7 +205,7 @@
           <div>
             <strong>Email alerts</strong>
             <p class="small text-muted mb-0">
-              New bookings are emailed to <code>ADMIN_EMAIL</code> (or venue contact / SMTP user).
+              New bookings are emailed to the address saved in <strong>Profile</strong>.
               Configure SMTP in Vercel env vars for delivery.
             </p>
           </div>

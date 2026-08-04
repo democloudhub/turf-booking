@@ -139,8 +139,9 @@ async function ensureSchema() {
     )
   `);
 
-  const { ensureAdminPasswordSeeded } = require('./settings');
+  const { ensureAdminPasswordSeeded, ensureAdminProfileSeeded } = require('./settings');
   await ensureAdminPasswordSeeded();
+  await ensureAdminProfileSeeded();
   const { ensureVapidKeys } = require('./notify/push');
   await ensureVapidKeys();
 

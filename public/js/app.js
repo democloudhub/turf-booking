@@ -49,6 +49,13 @@ async function getCurrentUser() {
 
 async function logoutUser() {
   await api('/api/auth/logout', { method: 'POST', body: '{}' });
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith('booking:'))
+      .forEach((key) => sessionStorage.removeItem(key));
+  } catch {
+    /* ignore */
+  }
   window.location.href = '/';
 }
 
@@ -65,11 +72,13 @@ async function renderAuthNav() {
   const slots = document.querySelectorAll('[data-auth-nav]');
   if (!slots.length) return null;
   const user = await getCurrentUser();
+  const initial = user
+    ? escapeHtml((user.name || 'U').trim().charAt(0).toUpperCase() || 'U')
+    : '';
   const html = user
     ? `<div class="user-menu">
-         <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true">
-           ${escapeHtml(user.name.split(' ')[0])}
-           <span class="user-menu-caret" aria-hidden="true"></span>
+         <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true" aria-label="${escapeHtml(user.name)} account menu" title="${escapeHtml(user.name)}">
+           <span class="user-avatar" aria-hidden="true">${initial}</span>
          </button>
          <ul class="user-menu-list" role="menu">
            <li role="none"><a role="menuitem" href="/account?tab=bookings">My Booking</a></li>
@@ -80,7 +89,6 @@ async function renderAuthNav() {
        </div>
        <a class="btn btn-sm btn-turf" href="/book">Book</a>`
     : `<a class="nav-link text-white" href="/availability">Availability</a>
-       <a class="nav-link text-white" href="${loginUrl('/book')}">Login</a>
        <a class="btn btn-sm btn-turf" href="${loginUrl('/book')}">Book</a>`;
 
   slots.forEach((el) => {

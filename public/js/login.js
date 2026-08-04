@@ -50,6 +50,12 @@
       showAlert(alertBox, 'Mobile number must be exactly 10 digits.');
       return;
     }
+    const password = document.getElementById('regPassword').value;
+    const confirmPassword = document.getElementById('regPasswordConfirm').value;
+    if (password !== confirmPassword) {
+      showAlert(alertBox, 'Passwords do not match.');
+      return;
+    }
     try {
       await api('/api/auth/register', {
         method: 'POST',
@@ -57,7 +63,7 @@
           name: document.getElementById('regName').value.trim(),
           mobile,
           email: document.getElementById('regEmail').value.trim(),
-          password: document.getElementById('regPassword').value
+          password
         })
       });
       const next = qs('next') || '/book';

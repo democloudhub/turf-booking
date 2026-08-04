@@ -5,7 +5,7 @@ const {
   clearSessionCookie,
   requireAdmin
 } = require('../auth');
-const { changeAdminPassword } = require('../settings');
+const { changeAdminPassword, getAdminProfile, updateAdminProfile } = require('../settings');
 const { getVenue, updateVenue } = require('../venue');
 const {
   listBookings,
@@ -40,8 +40,30 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/me', requireAdmin, (_req, res) => {
-  res.json({ ok: true, role: 'admin' });
+router.get('/me', requireAdmin, async (_req, res) => {
+  try {
+    const profile = await getAdminProfile();
+    res.json({ ok: true, role: 'admin', profile });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to load admin profile' });
+  }
+});
+
+router.get('/profile', requireAdmin, async (_req, res) => {
+  try {
+    res.json(await getAdminProfile());
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to load admin profile' });
+  }
+});
+
+router.put('/profile', requireAdmin, async (req, res) => {
+  try {
+    const profile = await updateAdminProfile(req.body);
+    res.json(profile);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Failed to update profile' });
+  }
 });
 
 router.get('/push/vapid-public-key', requireAdmin, async (_req, res) => {
