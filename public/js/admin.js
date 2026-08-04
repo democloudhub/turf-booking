@@ -5,8 +5,11 @@
   const loginPanel = document.getElementById('loginPanel');
   const adminPanel = document.getElementById('adminPanel');
   const logoutBtn = document.getElementById('logoutBtn');
-  const adminNavName = document.getElementById('adminNavName');
+  const adminNavUser = document.getElementById('adminNavUser');
+  const adminHello = document.getElementById('adminHello');
+  const adminAvatar = document.getElementById('adminAvatar');
   let currentCheckinId = null;
+  let pendingCancelId = null;
 
   bindMobileInput(document.getElementById('adminMobile'));
 
@@ -14,7 +17,7 @@
     try {
       const me = await api('/api/admin/me');
       showAdmin(me.profile);
-      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), refreshPushStatus()]);
+      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadGmailForm(), refreshPushStatus()]);
       return true;
     } catch {
       showLogin();
@@ -26,21 +29,24 @@
     loginPanel.hidden = false;
     adminPanel.hidden = true;
     logoutBtn.hidden = true;
-    if (adminNavName) {
-      adminNavName.hidden = true;
-      adminNavName.textContent = '';
-    }
+    if (adminNavUser) adminNavUser.hidden = true;
   }
 
   function showAdmin(profile) {
     loginPanel.hidden = true;
     adminPanel.hidden = false;
     logoutBtn.hidden = false;
-    if (adminNavName) {
-      const name = profile && profile.name ? profile.name : '';
-      adminNavName.textContent = name;
-      adminNavName.hidden = !name;
-    }
+    updateAdminNav(profile);
+  }
+
+  function updateAdminNav(profile) {
+    if (!adminNavUser) return;
+    const name = profile && profile.name ? String(profile.name).trim() : '';
+    const first = name.split(/\s+/)[0] || 'Admin';
+    const initial = (name.charAt(0) || 'A').toUpperCase();
+    adminHello.textContent = `Hello! ${first}`;
+    adminAvatar.textContent = initial;
+    adminNavUser.hidden = false;
   }
 
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -53,7 +59,7 @@
       });
       const me = await api('/api/admin/me');
       showAdmin(me.profile);
-      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), refreshPushStatus()]);
+      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadGmailForm(), refreshPushStatus()]);
     } catch (err) {
       showAlert(alertBox, err.message);
     }
@@ -69,7 +75,7 @@
       document.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
-      ['bookings', 'checkin', 'venue', 'profile', 'security', 'notifications'].forEach((name) => {
+      ['bookings', 'checkin', 'venue', 'account', 'notifications'].forEach((name) => {
         document.getElementById(`tab-${name}`).hidden = name !== tab;
       });
     });
@@ -81,10 +87,7 @@
     form.name.value = data.name || '';
     form.email.value = data.email || '';
     form.mobile.value = normalizeMobileInput(data.mobile || '');
-    if (adminNavName) {
-      adminNavName.textContent = data.name || '';
-      adminNavName.hidden = !data.name;
-    }
+    updateAdminNav(data);
   }
 
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
@@ -110,6 +113,61 @@
     } catch (err) {
       showAlert(alertBox, err.message);
     }
+  });
+
+  const cancelModal = document.getElementById('cancelModal');
+  const cancelReasonInput = document.getElementById('cancelReasonInput');
+
+  function openCancelModal(bookingId) {
+    pendingCancelId = bookingId;
+    document.getElementById('cancelModalBookingId').textContent = bookingId;
+    cancelReasonInput.value = '';
+    cancelModal.hidden = false;
+    cancelReasonInput.focus();
+  }
+
+  function closeCancelModal() {
+    pendingCancelId = null;
+    cancelModal.hidden = true;
+    cancelReasonInput.value = '';
+  }
+
+  cancelModal.querySelectorAll('[data-cancel-dismiss]').forEach((el) => {
+    el.addEventListener('click', () => closeCancelModal());
+  });
+
+  document.getElementById('cancelConfirmBtn').addEventListener('click', async () => {
+    if (!pendingCancelId) return;
+    const bookingId = pendingCancelId;
+    const reason = cancelReasonInput.value.trim();
+    const btn = document.getElementById('cancelConfirmBtn');
+    btn.disabled = true;
+    try {
+      const result = await api(`/api/admin/bookings/${bookingId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+      closeCancelModal();
+      const parts = (result.notifications || []).map((n) => {
+        if (n.skipped) return `${n.channel}: skipped`;
+        if (n.ok) return `${n.channel}: sent`;
+        return `${n.channel}: failed`;
+      });
+      showAlert(
+        alertBox,
+        `Booking cancelled. Notifications — ${parts.join(' · ') || 'none'}`,
+        'success'
+      );
+      loadBookings();
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !cancelModal.hidden) closeCancelModal();
   });
 
   async function loadBookings() {
@@ -147,21 +205,10 @@
 
     body.querySelectorAll('[data-checkin]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await api(`/api/admin/bookings/${btn.dataset.checkin}/check-in`, {
-          method: 'POST',
-          body: JSON.stringify({ checkedIn: true })
-        });
-        loadBookings();
-      });
-    });
-    body.querySelectorAll('[data-cancel]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Cancel this booking? The customer will be notified by email / WhatsApp / SMS.')) return;
-        const reason = window.prompt('Cancellation reason (optional):', '') || '';
         try {
-          const result = await api(`/api/admin/bookings/${btn.dataset.cancel}/cancel`, {
+          const result = await api(`/api/admin/bookings/${btn.dataset.checkin}/check-in`, {
             method: 'POST',
-            body: JSON.stringify({ reason })
+            body: JSON.stringify({ checkedIn: true })
           });
           const parts = (result.notifications || []).map((n) => {
             if (n.skipped) return `${n.channel}: skipped`;
@@ -170,7 +217,7 @@
           });
           showAlert(
             alertBox,
-            `Booking cancelled. Notifications — ${parts.join(' · ') || 'none'}`,
+            `Checked in. Notifications — ${parts.join(' · ') || 'none'}`,
             'success'
           );
           loadBookings();
@@ -178,6 +225,9 @@
           showAlert(alertBox, err.message);
         }
       });
+    });
+    body.querySelectorAll('[data-cancel]').forEach((btn) => {
+      btn.addEventListener('click', () => openCancelModal(btn.dataset.cancel));
     });
   }
 
@@ -215,13 +265,26 @@
 
   document.getElementById('checkinBtn').addEventListener('click', async () => {
     if (!currentCheckinId) return;
-    await api(`/api/admin/bookings/${currentCheckinId}/check-in`, {
-      method: 'POST',
-      body: JSON.stringify({ checkedIn: true })
-    });
-    showAlert(alertBox, `Checked in ${currentCheckinId}`, 'success');
-    document.getElementById('lookupBtn').click();
-    loadBookings();
+    try {
+      const result = await api(`/api/admin/bookings/${currentCheckinId}/check-in`, {
+        method: 'POST',
+        body: JSON.stringify({ checkedIn: true })
+      });
+      const parts = (result.notifications || []).map((n) => {
+        if (n.skipped) return `${n.channel}: skipped`;
+        if (n.ok) return `${n.channel}: sent`;
+        return `${n.channel}: failed`;
+      });
+      showAlert(
+        alertBox,
+        `Checked in ${currentCheckinId}. Notifications — ${parts.join(' · ') || 'none'}`,
+        'success'
+      );
+      document.getElementById('lookupBtn').click();
+      loadBookings();
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    }
   });
 
   async function loadVenueForm() {
@@ -293,6 +356,80 @@
       });
       document.getElementById('passwordForm').reset();
       showAlert(alertBox, 'Admin password updated. Use the new password next time you log in.', 'success');
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    }
+  });
+
+  async function loadGmailForm() {
+    const statusEl = document.getElementById('gmailStatus');
+    try {
+      const cfg = await api('/api/admin/email');
+      document.getElementById('gmailUser').value = cfg.user || '';
+      document.getElementById('gmailFrom').value = cfg.from || '';
+      document.getElementById('gmailClientId').value = cfg.clientId || '';
+      document.getElementById('gmailClientSecret').value = '';
+      document.getElementById('gmailClientSecret').placeholder = cfg.hasClientSecret
+        ? 'Saved — leave blank to keep'
+        : 'Paste OAuth client secret';
+      document.getElementById('gmailRefreshToken').value = '';
+      document.getElementById('gmailRefreshToken').placeholder = cfg.hasRefreshToken
+        ? 'Saved — leave blank to keep'
+        : 'Paste OAuth refresh token';
+      if (statusEl) {
+        statusEl.textContent = cfg.configured
+          ? `Gmail OAuth is configured for ${cfg.user}.`
+          : 'Gmail OAuth is not configured yet.';
+      }
+    } catch (err) {
+      if (statusEl) statusEl.textContent = err.message;
+    }
+  }
+
+  document.getElementById('gmailForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertBox.innerHTML = '';
+    try {
+      const payload = {
+        user: document.getElementById('gmailUser').value.trim(),
+        from: document.getElementById('gmailFrom').value.trim(),
+        clientId: document.getElementById('gmailClientId').value.trim()
+      };
+      const secret = document.getElementById('gmailClientSecret').value.trim();
+      const refresh = document.getElementById('gmailRefreshToken').value.trim();
+      if (secret) payload.clientSecret = secret;
+      if (refresh) payload.refreshToken = refresh;
+      const cfg = await api('/api/admin/email', {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      await loadGmailForm();
+      showAlert(
+        alertBox,
+        cfg.configured
+          ? 'Gmail OAuth settings saved. Emails will send without passwords.'
+          : 'Gmail settings saved, but configuration is still incomplete.',
+        'success'
+      );
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    }
+  });
+
+  document.getElementById('gmailTestBtn').addEventListener('click', async () => {
+    alertBox.innerHTML = '';
+    try {
+      const result = await api('/api/admin/email/test', {
+        method: 'POST',
+        body: JSON.stringify({ to: document.getElementById('gmailUser').value.trim() })
+      });
+      if (result.ok) {
+        showAlert(alertBox, 'Test email sent. Check your inbox.', 'success');
+      } else if (result.skipped) {
+        showAlert(alertBox, `Test skipped: ${result.reason || 'not configured'}`);
+      } else {
+        showAlert(alertBox, 'Test email failed.');
+      }
     } catch (err) {
       showAlert(alertBox, err.message);
     }

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "init-db": "node scripts/init-db.js"
+    "init-db": "node scripts/init-db.js",
+    "gmail-oauth": "node scripts/gmail-oauth-setup.js"
   },
   "engines": {
     "node": ">=18"

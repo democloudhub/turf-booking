@@ -3,6 +3,7 @@ const {
   notificationsEnabled,
   sendBookingEmail,
   sendCancellationEmail,
+  sendCheckedInEmail,
   sendAdminBookingEmail
 } = require('./email');
 const { sendAdminBookingPush } = require('./push');
@@ -148,6 +149,11 @@ async function sendAllCancellations(booking, reason) {
   return settleResults(results, ['email', 'sms', 'whatsapp']);
 }
 
+async function sendCheckedInNotification(booking) {
+  const results = await Promise.allSettled([sendCheckedInEmail(booking)]);
+  return settleResults(results, ['email']);
+}
+
 async function notifyAdminNewBooking(booking) {
   const results = await Promise.allSettled([
     sendAdminBookingEmail(booking),
@@ -161,6 +167,7 @@ module.exports = {
   sendBookingWhatsApp,
   sendAllConfirmations,
   sendAllCancellations,
+  sendCheckedInNotification,
   notifyAdminNewBooking,
   normalizeMobile
 };

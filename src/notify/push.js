@@ -27,6 +27,7 @@ async function ensureVapidKeys() {
     process.env.VAPID_SUBJECT ||
     (profile.email ? `mailto:${profile.email}` : null) ||
     process.env.ADMIN_EMAIL ||
+    process.env.GMAIL_USER ||
     process.env.SMTP_USER ||
     'mailto:admin@turf-booking.local';
   webpush.setVapidDetails(subject.startsWith('mailto:') ? subject : `mailto:${subject}`, publicKey, privateKey);

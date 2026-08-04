@@ -122,6 +122,7 @@ async function ensureSchema() {
       amount REAL NOT NULL,
       notes TEXT,
       status TEXT NOT NULL DEFAULT 'confirmed',
+      cancel_reason TEXT,
       checked_in INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     )
@@ -133,6 +134,12 @@ async function ensureSchema() {
 
   try {
     await db.execute('ALTER TABLE bookings ADD COLUMN user_id TEXT');
+  } catch {
+    /* column already exists */
+  }
+
+  try {
+    await db.execute('ALTER TABLE bookings ADD COLUMN cancel_reason TEXT');
   } catch {
     /* column already exists */
   }
@@ -150,9 +157,10 @@ async function ensureSchema() {
     )
   `);
 
-  const { ensureAdminPasswordSeeded, ensureAdminProfileSeeded } = require('./settings');
+  const { ensureAdminPasswordSeeded, ensureAdminProfileSeeded, ensureGmailConfigSeeded } = require('./settings');
   await ensureAdminPasswordSeeded();
   await ensureAdminProfileSeeded();
+  await ensureGmailConfigSeeded();
   const { ensureVapidKeys } = require('./notify/push');
   await ensureVapidKeys();
 
@@ -182,7 +190,7 @@ async function ensureSchema() {
         process.env.VENUE_ADDRESS || '123 Sports Complex, Your City',
         process.env.VENUE_PHONE || '+919876543210',
         process.env.VENUE_MAPS_URL || 'https://maps.google.com/?q=GreenField+Turf',
-        process.env.SMTP_FROM || process.env.SMTP_USER || '',
+        process.env.GMAIL_FROM || process.env.GMAIL_USER || process.env.SMTP_FROM || process.env.SMTP_USER || '',
         defaultRules,
         defaultImages,
         Number(process.env.VENUE_OPEN_HOUR || 6),

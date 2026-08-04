@@ -1,21 +1,26 @@
 const nodemailer = require('nodemailer');
 const { getVenue, slotLabel } = require('../venue');
+const { getGmailConfig } = require('../settings');
 
 function notificationsEnabled() {
   return String(process.env.NOTIFY_ENABLED || 'false').toLowerCase() === 'true';
 }
 
-function createTransport() {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+async function createTransport() {
+  const cfg = await getGmailConfig();
+  if (!cfg.configured) {
     return null;
   }
+
+  // Gmail OAuth2 only — no account passwords / app passwords.
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
+    service: 'gmail',
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      type: 'OAuth2',
+      user: cfg.user,
+      clientId: cfg.clientId,
+      clientSecret: cfg.clientSecret,
+      refreshToken: cfg.refreshToken
     }
   });
 }
@@ -104,7 +109,9 @@ async function sendBookingEmail(booking) {
 async function sendCancellationEmail(booking, reason) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
-  const reasonText = reason ? String(reason).trim() : '';
+  const reasonText = reason || booking.cancelReason || '';
+  const reasonClean = reasonText ? String(reasonText).trim() : '';
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   const subject = `Booking Cancelled — ${info.bookingId} | ${info.venueName}`;
   const text = [
     `Hi ${info.name},`,
@@ -116,8 +123,9 @@ async function sendCancellationEmail(booking, reason) {
     `Date: ${info.date}`,
     `Slot: ${info.slot}`,
     `Amount: ₹${info.amount}`,
-    reasonText ? `Reason: ${reasonText}` : null,
+    reasonClean ? `Reason: ${reasonClean}` : null,
     '',
+    `Confirmation page: ${appUrl}/confirmation?id=${info.bookingId}`,
     `For help, contact ${info.phone}.`,
     '',
     `— ${info.venueName}`
@@ -136,10 +144,57 @@ async function sendCancellationEmail(booking, reason) {
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Date</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.date)}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.slot)}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Amount</strong></td><td style="padding:8px;border:1px solid #ddd">₹${info.amount}</td></tr>
-        ${reasonText ? `<tr><td style="padding:8px;border:1px solid #ddd"><strong>Reason</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(reasonText)}</td></tr>` : ''}
+        ${reasonClean ? `<tr><td style="padding:8px;border:1px solid #ddd"><strong>Reason</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(reasonClean)}</td></tr>` : ''}
       </table>
+      <p><a href="${escapeHtml(appUrl)}/confirmation?id=${escapeHtml(info.bookingId)}">Open confirmation page</a></p>
       <p>For help, contact ${escapeHtml(info.phone)}.</p>
       <p style="color:#555">— ${escapeHtml(info.venueName)}</p>
+    </div>
+  `;
+
+  return sendMail({
+    to: booking.email,
+    subject,
+    text,
+    html,
+    channel: 'email',
+    bypassFlag: true
+  });
+}
+
+async function sendCheckedInEmail(booking) {
+  const venue = await getVenue();
+  const info = bookingSummary(booking, venue);
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const subject = `Checked In — ${info.bookingId} | ${info.venueName}`;
+  const text = [
+    `Hi ${info.name},`,
+    '',
+    `You have been checked in at ${info.venueName}. Enjoy your game!`,
+    '',
+    `Booking ID: ${info.bookingId}`,
+    `Date: ${info.date}`,
+    `Slot: ${info.slot}`,
+    `Amount: ₹${info.amount}`,
+    '',
+    `Confirmation page: ${appUrl}/confirmation?id=${info.bookingId}`,
+    '',
+    `— ${info.venueName}`
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
+      <h2 style="color:#2e7d32">Checked In</h2>
+      <p>Hi ${escapeHtml(info.name)},</p>
+      <p>You have been checked in at <strong>${escapeHtml(info.venueName)}</strong>. Enjoy your game!</p>
+      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.bookingId)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Date</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.date)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.slot)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Amount</strong></td><td style="padding:8px;border:1px solid #ddd">₹${info.amount}</td></tr>
+      </table>
+      <p><a href="${escapeHtml(appUrl)}/confirmation?id=${escapeHtml(info.bookingId)}">Open confirmation page</a></p>
+      <p style="color:#555">— ${escapeHtml(info.venueName)} · ${escapeHtml(info.phone)}</p>
     </div>
   `;
 
@@ -156,16 +211,17 @@ async function sendCancellationEmail(booking, reason) {
 async function sendAdminBookingEmail(booking) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
-  const { getAdminProfile } = require('../settings');
+  const { getAdminProfile, getGmailConfig } = require('../settings');
   const profile = await getAdminProfile();
+  const gmail = await getGmailConfig();
   const to =
     profile.email ||
     process.env.ADMIN_EMAIL ||
     venue.contactEmail ||
-    process.env.SMTP_USER;
+    gmail.user;
 
   if (!to) {
-    console.warn('[admin-email] Admin profile email / ADMIN_EMAIL / venue contact / SMTP_USER not set');
+    console.warn('[admin-email] Admin profile email / ADMIN_EMAIL / venue contact / Gmail user not set');
     return { skipped: true, channel: 'admin-email', reason: 'no_admin_email' };
   }
 
@@ -216,21 +272,22 @@ async function sendAdminBookingEmail(booking) {
 }
 
 async function sendMail({ to, subject, text, html, channel, bypassFlag = false, attachments = [] }) {
-  // Emails (customer + admin) send whenever SMTP is configured.
+  // Emails (customer + admin) send whenever Gmail OAuth is configured.
   // SMS/WhatsApp still use notificationsEnabled() in their own senders.
   if (!bypassFlag && !notificationsEnabled()) {
     console.log(`[${channel} skipped]`, { to, subject });
     return { skipped: true, channel };
   }
 
-  const transporter = createTransport();
+  const transporter = await createTransport();
   if (!transporter) {
-    console.warn(`[${channel}] SMTP not configured`);
+    console.warn(`[${channel}] Gmail OAuth not configured`);
     return { skipped: true, channel, reason: 'not_configured' };
   }
 
+  const cfg = await getGmailConfig();
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    from: cfg.from || cfg.user,
     to,
     subject,
     text,
@@ -248,9 +305,28 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+async function sendMailTest(to) {
+  const cfg = await getGmailConfig();
+  if (!cfg.configured) {
+    const err = new Error('Gmail OAuth is not configured');
+    err.status = 400;
+    throw err;
+  }
+  return sendMail({
+    to,
+    subject: 'Turf Booking — Gmail OAuth test',
+    text: 'Gmail OAuth email is working for Turf Booking.',
+    html: '<p>Gmail OAuth email is working for <strong>Turf Booking</strong>.</p>',
+    channel: 'email-test',
+    bypassFlag: true
+  });
+}
+
 module.exports = {
   sendBookingEmail,
   sendCancellationEmail,
+  sendCheckedInEmail,
   sendAdminBookingEmail,
+  sendMailTest,
   notificationsEnabled
 };

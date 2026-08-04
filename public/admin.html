@@ -14,9 +14,10 @@
   <nav class="navbar navbar-turf">
     <div class="container">
       <a class="navbar-brand display-font" href="/">Turf Admin</a>
-      <div class="d-flex align-items-center gap-2">
-        <span id="adminNavName" class="text-white small" hidden></span>
-        <button id="logoutBtn" class="btn btn-sm btn-outline-light" hidden>Logout</button>
+      <div class="d-flex align-items-center gap-2" id="adminNavUser" hidden>
+        <span class="admin-hello text-white" id="adminHello"></span>
+        <span class="user-avatar user-avatar-admin" id="adminAvatar" aria-hidden="true"></span>
+        <button id="logoutBtn" class="btn btn-sm btn-outline-light">Logout</button>
       </div>
     </div>
   </nav>
@@ -39,8 +40,7 @@
         <li class="nav-item"><button class="nav-link active" data-tab="bookings" type="button">Bookings</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="checkin" type="button">QR Check-in</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="venue" type="button">Venue &amp; Pricing</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="profile" type="button">Profile</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="security" type="button">Password</button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="account" type="button">Profile</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="notifications" type="button">Notifications</button></li>
       </ul>
 
@@ -147,45 +147,48 @@
         </form>
       </div>
 
-      <div id="tab-profile" hidden>
-        <form id="profileForm" class="form-panel" style="max-width:520px">
-          <h2 class="h4 mb-3">Admin Profile</h2>
-          <p class="text-muted">Used for staff identity. New booking emails are sent to this email address.</p>
-          <div class="mb-3">
-            <label class="form-label" for="adminName">Name</label>
-            <input id="adminName" name="name" class="form-control" required maxlength="80">
+      <div id="tab-account" hidden>
+        <div class="row g-4" style="max-width:980px">
+          <div class="col-lg-6">
+            <form id="profileForm" class="form-panel h-100">
+              <h2 class="h4 mb-3">Admin Profile</h2>
+              <p class="text-muted">Used for staff identity. New booking emails are sent to this email address.</p>
+              <div class="mb-3">
+                <label class="form-label" for="adminName">Name</label>
+                <input id="adminName" name="name" class="form-control" required maxlength="80">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="adminEmail">Email</label>
+                <input type="email" id="adminEmail" name="email" class="form-control" required>
+                <div class="form-text">Booking alert emails are delivered here.</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="adminMobile">Mobile</label>
+                <input id="adminMobile" name="mobile" class="form-control" pattern="\d{10}" maxlength="10" inputmode="numeric" placeholder="10-digit mobile">
+              </div>
+              <button class="btn btn-turf" type="submit">Save profile</button>
+            </form>
           </div>
-          <div class="mb-3">
-            <label class="form-label" for="adminEmail">Email</label>
-            <input type="email" id="adminEmail" name="email" class="form-control" required>
-            <div class="form-text">Booking alert emails are delivered here.</div>
+          <div class="col-lg-6">
+            <form id="passwordForm" class="form-panel h-100">
+              <h2 class="h4 mb-3">Change Password</h2>
+              <p class="text-muted">Password is stored securely in the database. After changing it, use the new password to sign in.</p>
+              <div class="mb-3">
+                <label class="form-label" for="currentPassword">Current password</label>
+                <input type="password" id="currentPassword" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="newPassword">New password</label>
+                <input type="password" id="newPassword" class="form-control" required minlength="6">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="confirmPassword">Confirm new password</label>
+                <input type="password" id="confirmPassword" class="form-control" required minlength="6">
+              </div>
+              <button class="btn btn-turf" type="submit">Update password</button>
+            </form>
           </div>
-          <div class="mb-3">
-            <label class="form-label" for="adminMobile">Mobile</label>
-            <input id="adminMobile" name="mobile" class="form-control" pattern="\d{10}" maxlength="10" inputmode="numeric" placeholder="10-digit mobile">
-          </div>
-          <button class="btn btn-turf" type="submit">Save profile</button>
-        </form>
-      </div>
-
-      <div id="tab-security" hidden>
-        <form id="passwordForm" class="form-panel" style="max-width:480px">
-          <h2 class="h4 mb-3">Change Admin Password</h2>
-          <p class="text-muted">Password is stored securely in the database. After changing it, use the new password to sign in.</p>
-          <div class="mb-3">
-            <label class="form-label" for="currentPassword">Current password</label>
-            <input type="password" id="currentPassword" class="form-control" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="newPassword">New password</label>
-            <input type="password" id="newPassword" class="form-control" required minlength="6">
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="confirmPassword">Confirm new password</label>
-            <input type="password" id="confirmPassword" class="form-control" required minlength="6">
-          </div>
-          <button class="btn btn-turf" type="submit">Update password</button>
-        </form>
+        </div>
       </div>
 
       <div id="tab-notifications" hidden>
@@ -203,16 +206,62 @@
           </div>
           <hr>
           <div>
-            <strong>Email alerts</strong>
-            <p class="small text-muted mb-0">
-              New bookings are emailed to the address saved in <strong>Profile</strong>.
-              Configure SMTP in Vercel env vars for delivery.
+            <strong>Gmail OAuth (no passwords)</strong>
+            <p class="small text-muted mb-2">
+              Emails use a Gmail OAuth refresh token — not an account password or app password.
+              Create an OAuth client in Google Cloud, enable Gmail API, then run
+              <code>npm run gmail-oauth</code> locally to get the refresh token.
+            </p>
+            <p class="small mb-3" id="gmailStatus">Checking email configuration…</p>
+            <form id="gmailForm">
+              <div class="mb-3">
+                <label class="form-label" for="gmailUser">Gmail address</label>
+                <input type="email" id="gmailUser" class="form-control" required placeholder="you@gmail.com">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="gmailFrom">From display</label>
+                <input id="gmailFrom" class="form-control" placeholder='GreenField Turf &lt;you@gmail.com&gt;'>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="gmailClientId">OAuth Client ID</label>
+                <input id="gmailClientId" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="gmailClientSecret">OAuth Client Secret</label>
+                <input id="gmailClientSecret" class="form-control" placeholder="Leave blank to keep existing">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="gmailRefreshToken">OAuth Refresh Token</label>
+                <textarea id="gmailRefreshToken" class="form-control" rows="2" placeholder="Leave blank to keep existing"></textarea>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-turf" type="submit">Save email settings</button>
+                <button class="btn btn-outline-secondary" type="button" id="gmailTestBtn">Send test email</button>
+              </div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">
+              Booking alerts still go to the address saved in <strong>Profile</strong>.
             </p>
           </div>
         </div>
       </div>
     </section>
   </main>
+
+  <div class="turf-modal" id="cancelModal" hidden>
+    <div class="turf-modal-backdrop" data-cancel-dismiss></div>
+    <div class="turf-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="cancelModalTitle">
+      <h2 class="h5 mb-2" id="cancelModalTitle">Cancel booking</h2>
+      <p class="text-muted mb-3">The customer will be notified by email. Add an optional reason below.</p>
+      <p class="small mb-2">Booking: <code id="cancelModalBookingId"></code></p>
+      <label class="form-label" for="cancelReasonInput">Cancellation reason</label>
+      <textarea id="cancelReasonInput" class="form-control mb-3" rows="3" maxlength="500" placeholder="Optional reason for the customer"></textarea>
+      <div class="d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-outline-secondary" data-cancel-dismiss>Keep booking</button>
+        <button type="button" class="btn btn-danger" id="cancelConfirmBtn">Cancel booking</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/js/app.js"></script>

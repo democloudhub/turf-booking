@@ -76,7 +76,8 @@ async function renderAuthNav() {
     ? escapeHtml((user.name || 'U').trim().charAt(0).toUpperCase() || 'U')
     : '';
   const html = user
-    ? `<div class="user-menu">
+    ? `<span class="nav-hello">Hello! ${escapeHtml((user.name || '').trim().split(/\s+/)[0] || 'there')}</span>
+       <div class="user-menu">
          <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true" aria-label="${escapeHtml(user.name)} account menu" title="${escapeHtml(user.name)}">
            <span class="user-avatar" aria-hidden="true">${initial}</span>
          </button>

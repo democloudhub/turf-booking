@@ -310,6 +310,50 @@ h1, h2, h3, .display-font {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+.nav-hello,
+.admin-hello {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.user-avatar-admin {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.85rem;
+}
+
+.turf-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.turf-modal[hidden] {
+  display: none !important;
+}
+
+.turf-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 30, 14, 0.55);
+}
+
+.turf-modal-dialog {
+  position: relative;
+  width: min(100%, 440px);
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 18px 48px rgba(13, 59, 18, 0.28);
+  border: 1px solid #d7e3d8;
+}
+
 .user-menu-list {
   display: none;
   position: absolute;

@@ -18,12 +18,9 @@
   await renderAuthNav();
 
   try {
-    const cached = sessionStorage.getItem(`booking:${id}`);
-    let data = cached ? JSON.parse(cached) : null;
-    if (!data || !data.booking || data.booking.userId !== user.id) {
-      data = await api(`/api/bookings/${encodeURIComponent(id)}`);
-      sessionStorage.setItem(`booking:${id}`, JSON.stringify(data));
-    }
+    // Always load fresh booking so cancel/check-in status is current.
+    const data = await api(`/api/bookings/${encodeURIComponent(id)}`);
+    sessionStorage.setItem(`booking:${id}`, JSON.stringify(data));
 
     const b = data.booking;
     let statusClass = 'confirmed';
@@ -49,12 +46,24 @@
     document.getElementById('qrImage').src = data.qrDataUrl;
     document.getElementById('pdfBtn').href = `/api/bookings/${encodeURIComponent(b.id)}/receipt.pdf`;
 
+    const reasonRow = document.getElementById('cancelReasonRow');
+    const reasonEl = document.getElementById('cCancelReason');
+    if (b.status === 'cancelled' && b.cancelReason) {
+      reasonEl.textContent = b.cancelReason;
+      reasonRow.hidden = false;
+    } else {
+      reasonEl.textContent = '';
+      reasonRow.hidden = true;
+    }
+
     const qrWrap = document.getElementById('qrWrap');
     const pdfBtn = document.getElementById('pdfBtn');
     if (b.status === 'cancelled') {
       qrWrap.hidden = true;
       pdfBtn.hidden = true;
-      document.getElementById('confirmHint').textContent = 'This booking was cancelled.';
+      document.getElementById('confirmHint').textContent = b.cancelReason
+        ? `This booking was cancelled. Reason: ${b.cancelReason}`
+        : 'This booking was cancelled.';
     } else if (b.checkedIn) {
       document.getElementById('confirmHint').textContent = 'Checked in at the venue.';
     } else {

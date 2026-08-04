@@ -179,11 +179,14 @@ async function setCheckedIn(id, checkedIn = true) {
   return getBookingById(id);
 }
 
-async function cancelBooking(id) {
+async function cancelBooking(id, reason = '') {
   const db = getDb();
+  const reasonText = String(reason || '').trim().slice(0, 500);
   const result = await db.execute({
-    sql: `UPDATE bookings SET status = 'cancelled' WHERE id = ? AND status != 'cancelled'`,
-    args: [id]
+    sql: `UPDATE bookings
+          SET status = 'cancelled', cancel_reason = ?
+          WHERE id = ? AND status != 'cancelled'`,
+    args: [reasonText || '', id]
   });
   if (result.rowsAffected === 0) {
     const existing = await getBookingById(id);
@@ -211,6 +214,7 @@ function mapBooking(row) {
     notes: row.notes || '',
     status: row.status,
     checkedIn: Boolean(row.checked_in),
+    cancelReason: row.cancel_reason || '',
     createdAt: row.created_at
   };
 }
