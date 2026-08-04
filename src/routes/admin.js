@@ -11,9 +11,19 @@ const {
   listBookings,
   getBookingById,
   setCheckedIn,
-  cancelBooking
+  cancelBooking,
+  createBooking,
+  getAvailability
 } = require('../bookings');
-const { sendAllCancellations, sendCheckedInNotification } = require('../notify');
+const {
+  sendAllCancellations,
+  sendCheckedInNotification,
+  sendAllConfirmations,
+  notifyAdminNewBooking,
+  sendWelcomeWithPasswordSetup
+} = require('../notify');
+const { findOrCreateCustomer } = require('../users');
+const { generateQrDataUrl } = require('../receipt');
 const {
   getVapidPublicKey,
   saveSubscription,
@@ -143,6 +153,8 @@ router.get('/bookings', requireAdmin, async (req, res) => {
     const bookings = await listBookings({
       from: req.query.from,
       to: req.query.to,
+      q: req.query.q,
+      status: req.query.status,
       limit: Number(req.query.limit || 200)
     });
     res.json({ bookings });
@@ -158,6 +170,61 @@ router.get('/bookings/:id', requireAdmin, async (req, res) => {
     res.json({ booking });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to load booking' });
+  }
+});
+
+router.get('/availability', requireAdmin, async (req, res) => {
+  try {
+    const date = req.query.date;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Query param date=YYYY-MM-DD is required' });
+    }
+    res.json(await getAvailability(date));
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to load availability' });
+  }
+});
+
+router.post('/bookings', requireAdmin, async (req, res) => {
+  try {
+    const { user, created, resetToken } = await findOrCreateCustomer({
+      name: req.body.name,
+      email: req.body.email,
+      mobile: req.body.mobile
+    });
+
+    const booking = await createBooking({
+      userId: user.id,
+      name: req.body.name || user.name,
+      mobile: req.body.mobile || user.mobile,
+      email: user.email,
+      bookingDate: req.body.bookingDate || req.body.date,
+      slotStart: req.body.slotStart,
+      notes: req.body.notes || (req.body.onPremise ? 'Walk-in / on-premise booking' : '')
+    });
+
+    const [notifications, adminNotifications, welcome] = await Promise.all([
+      sendAllConfirmations(booking),
+      notifyAdminNewBooking(booking),
+      created && resetToken
+        ? sendWelcomeWithPasswordSetup(user, resetToken, booking)
+        : Promise.resolve({ skipped: true, channel: 'welcome-email', reason: 'existing_user' })
+    ]);
+
+    const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+    const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
+
+    res.status(201).json({
+      booking,
+      qrDataUrl,
+      user,
+      accountCreated: created,
+      notifications,
+      adminNotifications,
+      welcomeNotification: welcome
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Walk-in booking failed' });
   }
 });
 

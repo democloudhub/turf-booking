@@ -98,9 +98,22 @@ async function ensureSchema() {
       email TEXT NOT NULL UNIQUE,
       mobile TEXT NOT NULL,
       password_hash TEXT NOT NULL,
+      password_reset_token TEXT,
+      password_reset_expires TEXT,
       created_at TEXT NOT NULL
     )
   `);
+
+  try {
+    await db.execute('ALTER TABLE users ADD COLUMN password_reset_token TEXT');
+  } catch {
+    /* column already exists */
+  }
+  try {
+    await db.execute('ALTER TABLE users ADD COLUMN password_reset_expires TEXT');
+  } catch {
+    /* column already exists */
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS settings (

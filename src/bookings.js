@@ -27,7 +27,7 @@ async function getBookingById(id) {
   return mapBooking(result.rows[0]);
 }
 
-async function listBookings({ from, to, limit = 100 } = {}) {
+async function listBookings({ from, to, limit = 100, q = '', status = '' } = {}) {
   const db = getDb();
   let sql = 'SELECT * FROM bookings WHERE 1=1';
   const args = [];
@@ -38,6 +38,20 @@ async function listBookings({ from, to, limit = 100 } = {}) {
   if (to) {
     sql += ' AND booking_date <= ?';
     args.push(to);
+  }
+  const query = String(q || '').trim();
+  if (query) {
+    sql += ' AND (LOWER(id) LIKE ? OR LOWER(name) LIKE ? OR mobile LIKE ? OR LOWER(email) LIKE ?)';
+    const like = `%${query.toLowerCase()}%`;
+    args.push(like, like, `%${query.replace(/\D/g, '') || query}%`, like);
+  }
+  const statusFilter = String(status || '').trim().toLowerCase();
+  if (statusFilter === 'cancelled') {
+    sql += ` AND status = 'cancelled'`;
+  } else if (statusFilter === 'checked-in' || statusFilter === 'checked_in') {
+    sql += ` AND checked_in = 1 AND status != 'cancelled'`;
+  } else if (statusFilter === 'confirmed') {
+    sql += ` AND status != 'cancelled' AND checked_in = 0`;
   }
   sql += ' ORDER BY booking_date DESC, slot_start DESC LIMIT ?';
   args.push(limit);

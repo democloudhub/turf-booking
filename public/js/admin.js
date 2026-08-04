@@ -12,10 +12,121 @@
   let pendingCancelId = null;
 
   bindMobileInput(document.getElementById('adminMobile'));
+  bindMobileInput(document.getElementById('walkinMobile'));
+
+  function todayISO() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  const walkinDate = document.getElementById('walkinDate');
+  const walkinSlotGrid = document.getElementById('walkinSlotGrid');
+  const walkinSlotStart = document.getElementById('walkinSlotStart');
+  const walkinPriceLabel = document.getElementById('walkinPriceLabel');
+  const walkinTotal = document.getElementById('walkinTotal');
+  if (walkinDate) {
+    walkinDate.min = todayISO();
+    walkinDate.value = todayISO();
+  }
+
+  async function loadWalkinSlots() {
+    if (!walkinDate || !walkinSlotGrid) return;
+    walkinSlotGrid.innerHTML = '<div class="text-muted">Loading slots…</div>';
+    walkinSlotStart.value = '';
+    walkinTotal.textContent = '—';
+    walkinPriceLabel.textContent = '';
+    const data = await api(`/api/admin/availability?date=${encodeURIComponent(walkinDate.value)}`);
+    walkinSlotGrid.innerHTML = '';
+    data.slots.forEach((slot) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `slot-chip ${slot.available ? 'available' : 'booked'}`;
+      btn.disabled = !slot.available;
+      btn.innerHTML = `<strong>${escapeHtml(slot.label)}</strong><span class="price">${slot.available ? formatMoney(slot.price) : 'Booked'}</span>`;
+      if (slot.available) {
+        btn.addEventListener('click', () => {
+          walkinSlotGrid.querySelectorAll('.slot-chip').forEach((el) => el.classList.remove('selected'));
+          btn.classList.add('selected');
+          walkinSlotStart.value = String(slot.start);
+          walkinTotal.textContent = formatMoney(slot.price);
+          walkinPriceLabel.textContent = slot.priceLabel || '';
+        });
+      }
+      walkinSlotGrid.appendChild(btn);
+    });
+  }
+
+  if (walkinDate) {
+    walkinDate.addEventListener('change', () => {
+      loadWalkinSlots().catch((err) => showAlert(alertBox, err.message));
+    });
+  }
+
+  document.getElementById('walkinForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertBox.innerHTML = '';
+    const name = document.getElementById('walkinName').value.trim();
+    const mobile = document.getElementById('walkinMobile').value.trim();
+    const email = document.getElementById('walkinEmail').value.trim();
+    const bookingDate = walkinDate.value;
+    const notes = document.getElementById('walkinNotes').value.trim();
+    if (!isValidMobile(mobile)) {
+      showAlert(alertBox, 'Phone number must be exactly 10 digits.');
+      return;
+    }
+    if (walkinSlotStart.value === '') {
+      showAlert(alertBox, 'Select an available slot.');
+      return;
+    }
+    const slotStart = Number(walkinSlotStart.value);
+    const submitBtn = document.getElementById('walkinSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Booking…';
+    try {
+      const result = await api('/api/admin/bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          mobile,
+          email,
+          bookingDate,
+          slotStart,
+          notes,
+          onPremise: true
+        })
+      });
+      const accountNote = result.accountCreated
+        ? 'New customer account created — set-password email sent.'
+        : 'Existing customer account used.';
+      showAlert(
+        alertBox,
+        `Booked ${result.booking.id}. ${accountNote} Confirmation email sent.`,
+        'success'
+      );
+      document.getElementById('walkinForm').reset();
+      walkinDate.value = todayISO();
+      walkinSlotStart.value = '';
+      walkinTotal.textContent = '—';
+      await loadWalkinSlots();
+      await loadBookings();
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Book & notify';
+    }
+  });
 
   async function checkAuth() {
     try {
       const me = await api('/api/admin/me');
+      const next = new URLSearchParams(window.location.search).get('next');
+      if (next && next.startsWith('/')) {
+        window.location.href = next;
+        return true;
+      }
       showAdmin(me.profile);
       await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadEmailForm(), refreshPushStatus()]);
       return true;
@@ -28,14 +139,14 @@
   function showLogin() {
     loginPanel.hidden = false;
     adminPanel.hidden = true;
-    logoutBtn.hidden = true;
     if (adminNavUser) adminNavUser.hidden = true;
+    const menu = document.getElementById('adminUserMenu');
+    if (menu) menu.classList.remove('open');
   }
 
   function showAdmin(profile) {
     loginPanel.hidden = true;
     adminPanel.hidden = false;
-    logoutBtn.hidden = false;
     updateAdminNav(profile);
   }
 
@@ -57,12 +168,32 @@
         method: 'POST',
         body: JSON.stringify({ password: document.getElementById('password').value })
       });
+      const next = new URLSearchParams(window.location.search).get('next');
+      if (next && next.startsWith('/')) {
+        window.location.href = next;
+        return;
+      }
       const me = await api('/api/admin/me');
       showAdmin(me.profile);
       await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadEmailForm(), refreshPushStatus()]);
     } catch (err) {
       showAlert(alertBox, err.message);
     }
+  });
+
+  const adminMenu = document.getElementById('adminUserMenu');
+  const adminMenuToggle = document.getElementById('adminMenuToggle');
+  if (adminMenuToggle && adminMenu) {
+    adminMenuToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = adminMenu.classList.toggle('open');
+      adminMenuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  document.addEventListener('click', () => {
+    if (!adminMenu) return;
+    adminMenu.classList.remove('open');
+    if (adminMenuToggle) adminMenuToggle.setAttribute('aria-expanded', 'false');
   });
 
   logoutBtn.addEventListener('click', async () => {
@@ -75,9 +206,12 @@
       document.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
-      ['bookings', 'checkin', 'venue', 'account', 'notifications'].forEach((name) => {
+      ['bookings', 'walkin', 'checkin', 'venue', 'account', 'notifications'].forEach((name) => {
         document.getElementById(`tab-${name}`).hidden = name !== tab;
       });
+      if (tab === 'walkin') {
+        loadWalkinSlots().catch((err) => showAlert(alertBox, err.message));
+      }
     });
   });
 
@@ -173,31 +307,40 @@
   async function loadBookings() {
     const from = document.getElementById('fromDate').value;
     const to = document.getElementById('toDate').value;
+    const q = document.getElementById('bookingSearch').value.trim();
+    const status = document.getElementById('bookingStatusFilter').value;
     const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
+    if (q) params.set('q', q);
+    if (status) params.set('status', status);
     const data = await api(`/api/admin/bookings?${params.toString()}`);
     const body = document.getElementById('bookingsBody');
+    if (!data.bookings.length) {
+      body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">No bookings match your filters.</td></tr>';
+      return;
+    }
     body.innerHTML = data.bookings
       .map((b) => {
-        const status = b.checkedIn
+        const statusBadge = b.checkedIn
           ? '<span class="badge text-bg-success">Checked-in</span>'
           : b.status === 'cancelled'
             ? '<span class="badge text-bg-secondary">Cancelled</span>'
             : '<span class="badge text-bg-primary">Confirmed</span>';
         const actions =
           b.status === 'cancelled'
-            ? ''
-            : `<button class="btn btn-sm btn-outline-success me-1" data-checkin="${escapeHtml(b.id)}">Check-in</button>
+            ? `<a class="btn btn-sm btn-outline-secondary" href="/confirmation?id=${encodeURIComponent(b.id)}">View</a>`
+            : `<a class="btn btn-sm btn-outline-secondary me-1" href="/confirmation?id=${encodeURIComponent(b.id)}">View</a>
+               <button class="btn btn-sm btn-outline-success me-1" data-checkin="${escapeHtml(b.id)}">Check-in</button>
                <button class="btn btn-sm btn-outline-danger" data-cancel="${escapeHtml(b.id)}">Cancel</button>`;
         return `<tr>
-          <td><code>${escapeHtml(b.id)}</code></td>
+          <td><code><a href="/confirmation?id=${encodeURIComponent(b.id)}">${escapeHtml(b.id)}</a></code></td>
           <td>${escapeHtml(b.bookingDate)}</td>
           <td>${escapeHtml(b.slotLabel)}</td>
           <td>${escapeHtml(b.name)}</td>
           <td>${escapeHtml(b.mobile)}</td>
           <td>${formatMoney(b.amount)}</td>
-          <td>${status}</td>
+          <td>${statusBadge}</td>
           <td class="text-nowrap">${actions}</td>
         </tr>`;
       })
@@ -232,6 +375,15 @@
   }
 
   document.getElementById('reloadBookings').addEventListener('click', () => {
+    loadBookings().catch((err) => showAlert(alertBox, err.message));
+  });
+  document.getElementById('bookingSearch').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      loadBookings().catch((err) => showAlert(alertBox, err.message));
+    }
+  });
+  document.getElementById('bookingStatusFilter').addEventListener('change', () => {
     loadBookings().catch((err) => showAlert(alertBox, err.message));
   });
 

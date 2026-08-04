@@ -124,7 +124,7 @@ async function changeUserPassword(userId, currentPassword, newPassword) {
     throw err;
   }
   if (String(newPassword).length < 6) {
-    const err = new Error('New password must be at least 6 characters');
+    const err = new Error('Password must be at least 6 characters');
     err.status = 400;
     throw err;
   }
@@ -141,10 +141,124 @@ async function changeUserPassword(userId, currentPassword, newPassword) {
   }
   const db = getDb();
   await db.execute({
-    sql: 'UPDATE users SET password_hash = ? WHERE id = ?',
+    sql: 'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?',
     args: [hashPassword(newPassword), userId]
   });
   return true;
+}
+
+async function findOrCreateCustomer({ name, email, mobile }) {
+  if (!name || !email || !mobile) {
+    const err = new Error('Name, email, and mobile are required');
+    err.status = 400;
+    throw err;
+  }
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    const err = new Error('Enter a valid email address');
+    err.status = 400;
+    throw err;
+  }
+  const mobileDigits = assertValidMobile(mobile);
+  const existing = await findUserByEmail(normalizedEmail);
+  if (existing) {
+    const db = getDb();
+    await db.execute({
+      sql: 'UPDATE users SET name = ?, mobile = ? WHERE id = ?',
+      args: [String(name).trim(), mobileDigits, existing.id]
+    });
+    return {
+      user: mapUser(await findUserById(existing.id)),
+      created: false,
+      resetToken: null
+    };
+  }
+
+  const id = `U-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const createdAt = new Date().toISOString();
+  const randomPassword = crypto.randomBytes(24).toString('hex');
+  const resetToken = crypto.randomBytes(24).toString('hex');
+  const resetExpires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+  const db = getDb();
+  await db.execute({
+    sql: `INSERT INTO users (
+            id, name, email, mobile, password_hash,
+            password_reset_token, password_reset_expires, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      String(name).trim(),
+      normalizedEmail,
+      mobileDigits,
+      hashPassword(randomPassword),
+      resetToken,
+      resetExpires,
+      createdAt
+    ]
+  });
+
+  return {
+    user: mapUser(await findUserById(id)),
+    created: true,
+    resetToken
+  };
+}
+
+async function createPasswordResetToken(email) {
+  const row = await findUserByEmail(email);
+  if (!row) {
+    // Do not reveal whether the email exists.
+    return { ok: true, sent: false };
+  }
+  const resetToken = crypto.randomBytes(24).toString('hex');
+  const resetExpires = new Date(Date.now() + 1000 * 60 * 60).toISOString(); // 1 hour
+  const db = getDb();
+  await db.execute({
+    sql: 'UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?',
+    args: [resetToken, resetExpires, row.id]
+  });
+  return {
+    ok: true,
+    sent: true,
+    user: mapUser(row),
+    resetToken
+  };
+}
+
+async function resetPasswordWithToken(token, newPassword) {
+  if (!token || !newPassword) {
+    const err = new Error('Reset token and new password are required');
+    err.status = 400;
+    throw err;
+  }
+  if (String(newPassword).length < 6) {
+    const err = new Error('Password must be at least 6 characters');
+    err.status = 400;
+    throw err;
+  }
+  const db = getDb();
+  const result = await db.execute({
+    sql: 'SELECT * FROM users WHERE password_reset_token = ?',
+    args: [String(token)]
+  });
+  const row = result.rows[0];
+  if (!row) {
+    const err = new Error('Invalid or expired reset link');
+    err.status = 400;
+    throw err;
+  }
+  if (!row.password_reset_expires || Date.now() > Date.parse(row.password_reset_expires)) {
+    const err = new Error('This reset link has expired. Request a new one.');
+    err.status = 400;
+    throw err;
+  }
+  await db.execute({
+    sql: `UPDATE users
+          SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL
+          WHERE id = ?`,
+    args: [hashPassword(newPassword), row.id]
+  });
+  return mapUser(await findUserById(row.id));
 }
 
 module.exports = {
@@ -154,6 +268,9 @@ module.exports = {
   findUserByEmail,
   updateUserProfile,
   changeUserPassword,
+  findOrCreateCustomer,
+  createPasswordResetToken,
+  resetPasswordWithToken,
   assertValidMobile,
   mapUser
 };

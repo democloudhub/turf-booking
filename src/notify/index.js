@@ -4,7 +4,9 @@ const {
   sendBookingEmail,
   sendCancellationEmail,
   sendCheckedInEmail,
-  sendAdminBookingEmail
+  sendAdminBookingEmail,
+  sendWelcomeSetPasswordEmail,
+  sendPasswordResetEmail
 } = require('./email');
 const { sendAdminBookingPush } = require('./push');
 
@@ -162,6 +164,14 @@ async function notifyAdminNewBooking(booking) {
   return settleResults(results, ['admin-email', 'push']);
 }
 
+async function sendWelcomeWithPasswordSetup(user, resetToken, booking) {
+  return sendWelcomeSetPasswordEmail(user, resetToken, booking);
+}
+
+async function sendPasswordReset(user, resetToken) {
+  return sendPasswordResetEmail(user, resetToken);
+}
+
 module.exports = {
   sendBookingSms,
   sendBookingWhatsApp,
@@ -169,5 +179,7 @@ module.exports = {
   sendAllCancellations,
   sendCheckedInNotification,
   notifyAdminNewBooking,
+  sendWelcomeWithPasswordSetup,
+  sendPasswordReset,
   normalizeMobile
 };

@@ -5,7 +5,7 @@ const {
   createBooking
 } = require('../bookings');
 const { findUserById, mapUser } = require('../users');
-const { requireUser } = require('../auth');
+const { requireUser, optionalUser, optionalAdmin } = require('../auth');
 const { sendAllConfirmations, notifyAdminNewBooking } = require('../notify');
 const { generateQrDataUrl, buildReceiptPdf } = require('../receipt');
 
@@ -59,30 +59,44 @@ router.post('/', requireUser, async (req, res) => {
   }
 });
 
-router.get('/:id', requireUser, async (req, res) => {
+router.get('/:id', optionalAdmin, optionalUser, async (req, res) => {
   try {
     const booking = await getBookingById(req.params.id);
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
-    if (booking.userId && booking.userId !== req.user.userId) {
+    const isAdmin = Boolean(req.admin);
+    const isOwner = Boolean(req.user && booking.userId === req.user.userId);
+    if (!isAdmin && !isOwner) {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Please log in to continue', code: 'LOGIN_REQUIRED' });
+      }
       return res.status(403).json({ error: 'Not allowed to view this booking' });
     }
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
     const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
-    res.json({ booking, qrDataUrl });
+    res.json({
+      booking,
+      qrDataUrl,
+      viewer: isAdmin ? 'admin' : 'customer'
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to load booking' });
   }
 });
 
-router.get('/:id/receipt.pdf', requireUser, async (req, res) => {
+router.get('/:id/receipt.pdf', optionalAdmin, optionalUser, async (req, res) => {
   try {
     const booking = await getBookingById(req.params.id);
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
-    if (booking.userId && booking.userId !== req.user.userId) {
+    const isAdmin = Boolean(req.admin);
+    const isOwner = Boolean(req.user && booking.userId === req.user.userId);
+    if (!isAdmin && !isOwner) {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Please log in to continue', code: 'LOGIN_REQUIRED' });
+      }
       return res.status(403).json({ error: 'Not allowed to download this receipt' });
     }
     const pdf = await buildReceiptPdf(booking);
@@ -93,7 +107,7 @@ router.get('/:id/receipt.pdf', requireUser, async (req, res) => {
     );
     res.send(pdf);
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Failed to generate receipt' });
+    res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });
 

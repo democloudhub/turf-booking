@@ -93,6 +93,10 @@ app.get('/login', (_req, res) => {
   res.sendFile(path.join(publicDir, 'login.html'));
 });
 
+app.get('/reset-password', (_req, res) => {
+  res.sendFile(path.join(publicDir, 'reset-password.html'));
+});
+
 app.get('/account', (_req, res) => {
   res.sendFile(path.join(publicDir, 'account.html'));
 });

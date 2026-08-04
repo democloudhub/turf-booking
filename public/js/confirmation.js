@@ -1,5 +1,6 @@
 (async function () {
-  const { api, qs, formatMoney, loadVenueIntoPage, showAlert, requireLoginOrRedirect, renderAuthNav } = TurfApp;
+  const { api, qs, formatMoney, loadVenueIntoPage, showAlert, requireLoginOrRedirect, renderAuthNav, loginUrl } =
+    TurfApp;
   await loadVenueIntoPage();
 
   const id = qs('id');
@@ -13,16 +14,35 @@
   }
 
   const next = `/confirmation?id=${encodeURIComponent(id)}`;
-  const user = await requireLoginOrRedirect(next);
-  if (!user) return;
-  await renderAuthNav();
 
-  try {
-    // Always load fresh booking so cancel/check-in status is current.
-    const data = await api(`/api/bookings/${encodeURIComponent(id)}`);
-    sessionStorage.setItem(`booking:${id}`, JSON.stringify(data));
+  async function isAdminLoggedIn() {
+    try {
+      await api('/api/admin/me');
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
+  const asAdmin = await isAdminLoggedIn();
+  if (!asAdmin) {
+    if (qs('from') === 'admin') {
+      window.location.href = `/admin?next=${encodeURIComponent(next)}`;
+      return;
+    }
+    const user = await requireLoginOrRedirect(next);
+    if (!user) return;
+    await renderAuthNav();
+  } else {
+    await renderAuthNav();
+  }
+
+  let currentBooking = null;
+
+  function renderBooking(data) {
     const b = data.booking;
+    currentBooking = b;
+
     let statusClass = 'confirmed';
     let statusLabel = 'Confirmed';
     if (b.status === 'cancelled') {
@@ -65,9 +85,29 @@
         ? `This booking was cancelled. Reason: ${b.cancelReason}`
         : 'This booking was cancelled.';
     } else if (b.checkedIn) {
+      qrWrap.hidden = false;
+      pdfBtn.hidden = false;
       document.getElementById('confirmHint').textContent = 'Checked in at the venue.';
     } else {
-      document.getElementById('confirmHint').textContent = 'Show this QR code at the venue for check-in.';
+      qrWrap.hidden = false;
+      pdfBtn.hidden = false;
+      document.getElementById('confirmHint').textContent = asAdmin
+        ? 'Admin view — you can check in or cancel this booking.'
+        : 'Show this QR code at the venue for check-in.';
+    }
+
+    const customerActions = document.getElementById('customerActions');
+    const adminActions = document.getElementById('adminActions');
+    if (asAdmin) {
+      customerActions.hidden = true;
+      adminActions.hidden = false;
+      const canAct = b.status !== 'cancelled';
+      document.getElementById('adminCheckinBtn').disabled = !canAct || Boolean(b.checkedIn);
+      document.getElementById('adminCancelBtn').disabled = !canAct;
+      document.getElementById('adminCheckinBtn').textContent = b.checkedIn ? 'Already checked in' : 'Check-in';
+    } else {
+      customerActions.hidden = false;
+      adminActions.hidden = true;
     }
 
     if (data.notifications) {
@@ -76,12 +116,100 @@
         if (n.ok) return `${n.channel}: sent`;
         return `${n.channel}: failed`;
       });
-      document.getElementById('notifyStatus').textContent =
-        `Notifications — ${parts.join(' · ')} (enable NOTIFY_ENABLED + credentials to send)`;
+      document.getElementById('notifyStatus').textContent = `Notifications — ${parts.join(' · ')}`;
     }
 
     card.hidden = false;
-  } catch (err) {
-    showAlert(alertBox, err.message);
   }
+
+  async function loadBooking() {
+    const data = await api(`/api/bookings/${encodeURIComponent(id)}`);
+    sessionStorage.setItem(`booking:${id}`, JSON.stringify(data));
+    renderBooking(data);
+  }
+
+  try {
+    await loadBooking();
+  } catch (err) {
+    if ((err.code === 'LOGIN_REQUIRED' || err.status === 401) && qs('from') === 'admin') {
+      window.location.href = `/admin?next=${encodeURIComponent(next)}`;
+      return;
+    }
+    if (err.code === 'LOGIN_REQUIRED' || err.status === 401) {
+      window.location.href = loginUrl(next);
+      return;
+    }
+    showAlert(alertBox, err.message);
+    return;
+  }
+
+  if (!asAdmin) return;
+
+  const cancelModal = document.getElementById('cancelModal');
+  const cancelReasonInput = document.getElementById('cancelReasonInput');
+
+  function openCancelModal() {
+    if (!currentBooking) return;
+    document.getElementById('cancelModalBookingId').textContent = currentBooking.id;
+    cancelReasonInput.value = '';
+    cancelModal.hidden = false;
+    cancelReasonInput.focus();
+  }
+
+  function closeCancelModal() {
+    cancelModal.hidden = true;
+    cancelReasonInput.value = '';
+  }
+
+  cancelModal.querySelectorAll('[data-cancel-dismiss]').forEach((el) => {
+    el.addEventListener('click', () => closeCancelModal());
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !cancelModal.hidden) closeCancelModal();
+  });
+
+  document.getElementById('adminCheckinBtn').addEventListener('click', async () => {
+    if (!currentBooking) return;
+    try {
+      const result = await api(`/api/admin/bookings/${currentBooking.id}/check-in`, {
+        method: 'POST',
+        body: JSON.stringify({ checkedIn: true })
+      });
+      const parts = (result.notifications || []).map((n) => {
+        if (n.skipped) return `${n.channel}: skipped`;
+        if (n.ok) return `${n.channel}: sent`;
+        return `${n.channel}: failed`;
+      });
+      showAlert(alertBox, `Checked in. Notifications — ${parts.join(' · ') || 'none'}`, 'success');
+      await loadBooking();
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    }
+  });
+
+  document.getElementById('adminCancelBtn').addEventListener('click', () => openCancelModal());
+
+  document.getElementById('cancelConfirmBtn').addEventListener('click', async () => {
+    if (!currentBooking) return;
+    const btn = document.getElementById('cancelConfirmBtn');
+    btn.disabled = true;
+    try {
+      const result = await api(`/api/admin/bookings/${currentBooking.id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: cancelReasonInput.value.trim() })
+      });
+      closeCancelModal();
+      const parts = (result.notifications || []).map((n) => {
+        if (n.skipped) return `${n.channel}: skipped`;
+        if (n.ok) return `${n.channel}: sent`;
+        return `${n.channel}: failed`;
+      });
+      showAlert(alertBox, `Booking cancelled. Notifications — ${parts.join(' · ') || 'none'}`, 'success');
+      await loadBooking();
+    } catch (err) {
+      showAlert(alertBox, err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 })();

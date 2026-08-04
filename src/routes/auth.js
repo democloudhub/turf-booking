@@ -5,6 +5,8 @@ const {
   findUserById,
   updateUserProfile,
   changeUserPassword,
+  createPasswordResetToken,
+  resetPasswordWithToken,
   mapUser
 } = require('../users');
 const {
@@ -14,6 +16,7 @@ const {
   requireUser
 } = require('../auth');
 const { listBookingsByUser } = require('../bookings');
+const { sendPasswordReset } = require('../notify');
 
 const router = express.Router();
 
@@ -95,6 +98,32 @@ router.get('/my-bookings', requireUser, async (req, res) => {
     res.json({ bookings });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to load bookings' });
+  }
+});
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const result = await createPasswordResetToken(req.body.email);
+    if (result.sent) {
+      await sendPasswordReset(result.user, result.resetToken);
+    }
+    res.json({
+      ok: true,
+      message: 'If an account exists for that email, a reset link has been sent.'
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Failed to start password reset' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const user = await resetPasswordWithToken(req.body.token, req.body.password);
+    const token = createUserSessionToken(user);
+    setUserSessionCookie(res, token);
+    res.json({ ok: true, user, message: 'Password updated. You are now signed in.' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Failed to reset password' });
   }
 });
 

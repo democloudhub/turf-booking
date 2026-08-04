@@ -111,6 +111,14 @@ function optionalUser(req, _res, next) {
   next();
 }
 
+function optionalAdmin(req, _res, next) {
+  const session = verify(req.cookies?.[ADMIN_COOKIE]);
+  if (session && session.role === 'admin') {
+    req.admin = session;
+  }
+  next();
+}
+
 async function adminLogin(password) {
   const { verifyAdminPassword } = require('./settings');
   const ok = await verifyAdminPassword(password);
@@ -131,6 +139,7 @@ module.exports = {
   requireAdmin,
   requireUser,
   optionalUser,
+  optionalAdmin,
   adminLogin,
   // backward-compatible aliases used by admin routes
   login: adminLogin,

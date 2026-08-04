@@ -93,7 +93,7 @@ async function sendAdminBookingPush(booking) {
   const payload = JSON.stringify({
     title: 'New turf booking',
     body: `${booking.name} · ${booking.bookingDate} · ${slot} · ₹${booking.amount}`,
-    url: `${appUrl}/admin`,
+    url: `${appUrl}/confirmation?id=${encodeURIComponent(booking.id)}&from=admin`,
     bookingId: booking.id
   });
 

@@ -192,6 +192,9 @@ async function sendAdminBookingEmail(booking) {
   }
 
   const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+  const confirmUrl = appUrl
+    ? `${appUrl}/confirmation?id=${encodeURIComponent(info.bookingId)}&from=admin`
+    : '';
   const subject = `New booking ${info.bookingId} — ${info.venueName}`;
   const text = [
     `New turf booking received.`,
@@ -205,6 +208,7 @@ async function sendAdminBookingEmail(booking) {
     `Amount: ₹${info.amount}`,
     booking.notes ? `Notes: ${booking.notes}` : null,
     '',
+    confirmUrl ? `Open booking: ${confirmUrl}` : null,
     appUrl ? `Admin: ${appUrl}/admin` : null
   ]
     .filter((line) => line !== null)
@@ -223,6 +227,7 @@ async function sendAdminBookingEmail(booking) {
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.slot)}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Amount</strong></td><td style="padding:8px;border:1px solid #ddd">₹${info.amount}</td></tr>
       </table>
+      ${confirmUrl ? `<p><a href="${escapeHtml(confirmUrl)}">Open booking confirmation</a> (check-in or cancel)</p>` : ''}
       ${appUrl ? `<p><a href="${escapeHtml(appUrl)}/admin">Open Admin</a></p>` : ''}
     </div>
   `;
@@ -238,11 +243,16 @@ async function sendAdminBookingEmail(booking) {
 }
 
 async function sendMail({ to, subject, text, html, channel, bypassFlag = false }) {
-  // Emails (customer + admin) send whenever Resend is configured.
-  // SMS/WhatsApp still use notificationsEnabled() in their own senders.
+  // Customer + admin emails always attempt when Resend is configured
+  // (booking confirm, cancel, check-in). SMS/WhatsApp still use NOTIFY_ENABLED.
   if (!bypassFlag && !notificationsEnabled()) {
     console.log(`[${channel} skipped]`, { to, subject });
     return { skipped: true, channel };
+  }
+
+  if (!to) {
+    console.warn(`[${channel}] missing recipient`);
+    return { skipped: true, channel, reason: 'no_recipient' };
   }
 
   const cfg = await getResendConfig();
@@ -269,12 +279,13 @@ async function sendMail({ to, subject, text, html, channel, bypassFlag = false }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const message = body.message || body.error || `Resend HTTP ${res.status}`;
-    console.error(`[${channel}] Resend failed`, message);
+    console.error(`[${channel}] Resend failed`, { to, subject, message });
     const err = new Error(message);
     err.status = res.status;
     throw err;
   }
 
+  console.log(`[${channel}] sent`, { to, subject, id: body.id });
   return { ok: true, channel, id: body.id };
 }
 
@@ -308,11 +319,96 @@ async function sendMailTest(to) {
   });
 }
 
+async function sendWelcomeSetPasswordEmail(user, resetToken, booking) {
+  const venue = await getVenue();
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const setUrl = `${appUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const confirmUrl = booking
+    ? `${appUrl}/confirmation?id=${encodeURIComponent(booking.id)}`
+    : `${appUrl}/login`;
+  const subject = `Your ${venue.name} account — set a password`;
+  const text = [
+    `Hi ${user.name},`,
+    '',
+    `An account was created for you at ${venue.name}.`,
+    `Email: ${user.email}`,
+    '',
+    'Set your password to log in next time:',
+    setUrl,
+    '',
+    booking ? `Your booking ID: ${booking.id}` : null,
+    booking ? `Confirmation: ${confirmUrl}` : null,
+    '',
+    `— ${venue.name}`
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
+      <h2 style="color:#1b5e20">Welcome to ${escapeHtml(venue.name)}</h2>
+      <p>Hi ${escapeHtml(user.name)},</p>
+      <p>An account was created for you so you can manage bookings online.</p>
+      <p><strong>Email:</strong> ${escapeHtml(user.email)}</p>
+      <p><a href="${escapeHtml(setUrl)}">Set your password</a> to log in next time.</p>
+      ${booking ? `<p>Booking ID: <strong>${escapeHtml(booking.id)}</strong><br><a href="${escapeHtml(confirmUrl)}">View confirmation</a></p>` : ''}
+      <p style="color:#555">— ${escapeHtml(venue.name)}</p>
+    </div>
+  `;
+
+  return sendMail({
+    to: user.email,
+    subject,
+    text,
+    html,
+    channel: 'welcome-email',
+    bypassFlag: true
+  });
+}
+
+async function sendPasswordResetEmail(user, resetToken) {
+  const venue = await getVenue();
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const setUrl = `${appUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const subject = `Reset your ${venue.name} password`;
+  const text = [
+    `Hi ${user.name},`,
+    '',
+    'Use this link to reset your password (valid for 1 hour):',
+    setUrl,
+    '',
+    'If you did not request this, you can ignore this email.',
+    '',
+    `— ${venue.name}`
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
+      <h2 style="color:#1b5e20">Password reset</h2>
+      <p>Hi ${escapeHtml(user.name)},</p>
+      <p><a href="${escapeHtml(setUrl)}">Reset your password</a> (link valid for 1 hour).</p>
+      <p style="color:#555">If you did not request this, ignore this email.</p>
+      <p style="color:#555">— ${escapeHtml(venue.name)}</p>
+    </div>
+  `;
+
+  return sendMail({
+    to: user.email,
+    subject,
+    text,
+    html,
+    channel: 'password-reset',
+    bypassFlag: true
+  });
+}
+
 module.exports = {
   sendBookingEmail,
   sendCancellationEmail,
   sendCheckedInEmail,
   sendAdminBookingEmail,
+  sendWelcomeSetPasswordEmail,
+  sendPasswordResetEmail,
   sendMailTest,
   notificationsEnabled
 };

@@ -77,17 +77,19 @@ async function renderAuthNav() {
     : '';
   const html = user
     ? `<a class="btn btn-sm btn-turf" href="/book">Book</a>
-       <span class="nav-hello">Hello! ${escapeHtml((user.name || '').trim().split(/\s+/)[0] || 'there')}</span>
-       <div class="user-menu">
-         <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true" aria-label="${escapeHtml(user.name)} account menu" title="${escapeHtml(user.name)}">
-           <span class="user-avatar" aria-hidden="true">${initial}</span>
-         </button>
-         <ul class="user-menu-list" role="menu">
-           <li role="none"><a role="menuitem" href="/account?tab=bookings">My Booking</a></li>
-           <li role="none"><a role="menuitem" href="/account?tab=profile">Profile</a></li>
-           <li role="none"><a role="menuitem" href="/account?tab=password">Change Password</a></li>
-           <li role="none"><button type="button" role="menuitem" data-logout>Logout</button></li>
-         </ul>
+       <div class="nav-user-cluster">
+         <span class="nav-hello">Hello! ${escapeHtml((user.name || '').trim().split(/\s+/)[0] || 'there')}</span>
+         <div class="user-menu">
+           <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true" aria-label="${escapeHtml(user.name)} account menu" title="${escapeHtml(user.name)}">
+             <span class="user-avatar" aria-hidden="true">${initial}</span>
+           </button>
+           <ul class="user-menu-list" role="menu">
+             <li role="none"><a role="menuitem" href="/account?tab=bookings">My Booking</a></li>
+             <li role="none"><a role="menuitem" href="/account?tab=profile">Profile</a></li>
+             <li role="none"><a role="menuitem" href="/account?tab=password">Change Password</a></li>
+             <li role="none"><button type="button" role="menuitem" data-logout>Logout</button></li>
+           </ul>
+         </div>
        </div>`
     : `<a class="nav-link text-white" href="/availability">Availability</a>
        <a class="btn btn-sm btn-turf" href="${loginUrl('/book')}">Book</a>`;

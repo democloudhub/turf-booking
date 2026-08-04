@@ -318,6 +318,12 @@ h1, h2, h3, .display-font {
   white-space: nowrap;
 }
 
+.nav-user-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .user-avatar-admin {
   width: 2rem;
   height: 2rem;

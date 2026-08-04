@@ -16,8 +16,14 @@
       <a class="navbar-brand display-font" href="/">Turf Admin</a>
       <div class="d-flex align-items-center gap-2" id="adminNavUser" hidden>
         <span class="admin-hello text-white" id="adminHello"></span>
-        <span class="user-avatar user-avatar-admin" id="adminAvatar" aria-hidden="true"></span>
-        <button id="logoutBtn" class="btn btn-sm btn-outline-light">Logout</button>
+        <div class="user-menu" id="adminUserMenu">
+          <button type="button" class="user-menu-toggle" id="adminMenuToggle" aria-expanded="false" aria-haspopup="true" aria-label="Admin menu">
+            <span class="user-avatar user-avatar-admin" id="adminAvatar" aria-hidden="true"></span>
+          </button>
+          <ul class="user-menu-list" role="menu">
+            <li role="none"><button type="button" role="menuitem" id="logoutBtn">Logout</button></li>
+          </ul>
+        </div>
       </div>
     </div>
   </nav>
@@ -38,6 +44,7 @@
     <section id="adminPanel" hidden>
       <ul class="nav nav-pills mb-3 gap-2">
         <li class="nav-item"><button class="nav-link active" data-tab="bookings" type="button">Bookings</button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="walkin" type="button">Walk-in Book</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="checkin" type="button">QR Check-in</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="venue" type="button">Venue &amp; Pricing</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="account" type="button">Profile</button></li>
@@ -54,7 +61,20 @@
             <label class="form-label">To</label>
             <input type="date" id="toDate" class="form-control">
           </div>
-          <button class="btn btn-turf" id="reloadBookings" type="button">Reload</button>
+          <div style="min-width:200px">
+            <label class="form-label" for="bookingSearch">Search</label>
+            <input type="search" id="bookingSearch" class="form-control" placeholder="ID, name, mobile, email">
+          </div>
+          <div>
+            <label class="form-label" for="bookingStatusFilter">Status</label>
+            <select id="bookingStatusFilter" class="form-select">
+              <option value="">All</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="checked-in">Checked-In</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <button class="btn btn-turf" id="reloadBookings" type="button">Apply</button>
         </div>
         <div class="table-responsive form-panel p-0">
           <table class="table table-turf table-hover mb-0">
@@ -73,6 +93,45 @@
             <tbody id="bookingsBody"></tbody>
           </table>
         </div>
+      </div>
+
+      <div id="tab-walkin" hidden>
+        <form id="walkinForm" class="form-panel" style="max-width:720px">
+          <h2 class="h4 mb-2">On-premise / Walk-in Booking</h2>
+          <p class="text-muted">Book for a customer at the venue. New customers get an account email with a set-password link.</p>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="walkinName">Name</label>
+              <input id="walkinName" name="name" class="form-control" required maxlength="80">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="walkinMobile">Phone #</label>
+              <input id="walkinMobile" name="mobile" class="form-control" required pattern="\d{10}" maxlength="10" inputmode="numeric" placeholder="10-digit mobile">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="walkinEmail">Email</label>
+              <input type="email" id="walkinEmail" name="email" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="walkinDate">Date</label>
+              <input type="date" id="walkinDate" name="bookingDate" class="form-control" required>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Slot</label>
+              <div id="walkinSlotGrid" class="slot-grid"></div>
+              <input type="hidden" id="walkinSlotStart" name="slotStart" required>
+              <div class="small text-muted mt-1" id="walkinPriceLabel"></div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="walkinNotes">Notes (optional)</label>
+              <input id="walkinNotes" name="notes" class="form-control" maxlength="200">
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+              <button class="btn btn-turf" type="submit" id="walkinSubmitBtn">Book &amp; notify</button>
+              <span class="fw-semibold" id="walkinTotal">—</span>
+            </div>
+          </div>
+        </form>
       </div>
 
       <div id="tab-checkin" hidden>
