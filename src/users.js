@@ -36,6 +36,17 @@ async function findUserByEmail(email) {
   return result.rows[0] || null;
 }
 
+async function findUserByMobile(mobile) {
+  const digits = normalizeMobileInput(mobile);
+  if (!/^\d{10}$/.test(digits)) return null;
+  const db = getDb();
+  const result = await db.execute({
+    sql: 'SELECT * FROM users WHERE mobile = ? LIMIT 1',
+    args: [digits]
+  });
+  return result.rows[0] || null;
+}
+
 async function findUserById(id) {
   const db = getDb();
   const result = await db.execute({
@@ -160,12 +171,24 @@ async function findOrCreateCustomer({ name, email, mobile }) {
     throw err;
   }
   const mobileDigits = assertValidMobile(mobile);
-  const existing = await findUserByEmail(normalizedEmail);
+
+  const byEmail = await findUserByEmail(normalizedEmail);
+  const byMobile = await findUserByMobile(mobileDigits);
+
+  if (byEmail && byMobile && byEmail.id !== byMobile.id) {
+    const err = new Error(
+      'This email and mobile belong to different accounts. Use matching details or update the customer profile.'
+    );
+    err.status = 409;
+    throw err;
+  }
+
+  const existing = byEmail || byMobile;
   if (existing) {
     const db = getDb();
     await db.execute({
-      sql: 'UPDATE users SET name = ?, mobile = ? WHERE id = ?',
-      args: [String(name).trim(), mobileDigits, existing.id]
+      sql: 'UPDATE users SET name = ?, mobile = ?, email = ? WHERE id = ?',
+      args: [String(name).trim(), mobileDigits, normalizedEmail, existing.id]
     });
     return {
       user: mapUser(await findUserById(existing.id)),
@@ -266,6 +289,7 @@ module.exports = {
   authenticateUser,
   findUserById,
   findUserByEmail,
+  findUserByMobile,
   updateUserProfile,
   changeUserPassword,
   findOrCreateCustomer,

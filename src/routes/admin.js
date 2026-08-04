@@ -22,7 +22,7 @@ const {
   notifyAdminNewBooking,
   sendWelcomeWithPasswordSetup
 } = require('../notify');
-const { findOrCreateCustomer } = require('../users');
+const { findOrCreateCustomer, findUserByMobile, mapUser } = require('../users');
 const { generateQrDataUrl } = require('../receipt');
 const {
   getVapidPublicKey,
@@ -182,6 +182,22 @@ router.get('/availability', requireAdmin, async (req, res) => {
     res.json(await getAvailability(date));
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to load availability' });
+  }
+});
+
+router.get('/customers/lookup', requireAdmin, async (req, res) => {
+  try {
+    const mobile = String(req.query.mobile || '').replace(/\D/g, '');
+    if (!/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ error: 'Enter a valid 10-digit mobile number' });
+    }
+    const row = await findUserByMobile(mobile);
+    if (!row) {
+      return res.json({ exists: false, user: null });
+    }
+    res.json({ exists: true, user: mapUser(row) });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to look up customer' });
   }
 });
 

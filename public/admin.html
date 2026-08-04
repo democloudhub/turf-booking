@@ -96,17 +96,18 @@
       </div>
 
       <div id="tab-walkin" hidden>
-        <form id="walkinForm" class="form-panel" style="max-width:720px">
+        <form id="walkinForm" class="form-panel">
           <h2 class="h4 mb-2">On-premise / Walk-in Booking</h2>
-          <p class="text-muted">Book for a customer at the venue. New customers get an account email with a set-password link.</p>
+          <p class="text-muted">Enter the phone number first. Existing customers are filled in automatically.</p>
           <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label" for="walkinName">Name</label>
-              <input id="walkinName" name="name" class="form-control" required maxlength="80">
-            </div>
             <div class="col-md-4">
               <label class="form-label" for="walkinMobile">Phone #</label>
               <input id="walkinMobile" name="mobile" class="form-control" required pattern="\d{10}" maxlength="10" inputmode="numeric" placeholder="10-digit mobile">
+              <div class="form-text" id="walkinCustomerStatus">Enter a 10-digit mobile to check if the customer exists.</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="walkinName">Name</label>
+              <input id="walkinName" name="name" class="form-control" required maxlength="80">
             </div>
             <div class="col-md-4">
               <label class="form-label" for="walkinEmail">Email</label>

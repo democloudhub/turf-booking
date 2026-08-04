@@ -13,7 +13,7 @@
     return;
   }
 
-  const next = `/confirmation?id=${encodeURIComponent(id)}`;
+  const next = `/confirmation?id=${encodeURIComponent(id)}${qs('from') === 'admin' ? '&from=admin' : ''}`;
 
   async function isAdminLoggedIn() {
     try {
@@ -25,9 +25,13 @@
   }
 
   const asAdmin = await isAdminLoggedIn();
-  if (!asAdmin) {
-    if (qs('from') === 'admin') {
-      window.location.href = `/admin?next=${encodeURIComponent(next)}`;
+  const fromAdminLink = qs('from') === 'admin';
+  // Check-in / Cancel are admin-only and only on admin email/list links.
+  const showAdminTools = asAdmin && fromAdminLink;
+
+  if (!showAdminTools) {
+    if (fromAdminLink && !asAdmin) {
+      window.location.href = `/admin?next=${encodeURIComponent(`${next}&from=admin`)}`;
       return;
     }
     const user = await requireLoginOrRedirect(next);
@@ -91,14 +95,14 @@
     } else {
       qrWrap.hidden = false;
       pdfBtn.hidden = false;
-      document.getElementById('confirmHint').textContent = asAdmin
+      document.getElementById('confirmHint').textContent = showAdminTools
         ? 'Admin view — you can check in or cancel this booking.'
         : 'Show this QR code at the venue for check-in.';
     }
 
     const customerActions = document.getElementById('customerActions');
     const adminActions = document.getElementById('adminActions');
-    if (asAdmin) {
+    if (showAdminTools) {
       customerActions.hidden = true;
       adminActions.hidden = false;
       const canAct = b.status !== 'cancelled';
@@ -143,7 +147,7 @@
     return;
   }
 
-  if (!asAdmin) return;
+  if (!showAdminTools) return;
 
   const cancelModal = document.getElementById('cancelModal');
   const cancelReasonInput = document.getElementById('cancelReasonInput');

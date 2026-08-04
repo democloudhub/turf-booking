@@ -14,6 +14,58 @@
   bindMobileInput(document.getElementById('adminMobile'));
   bindMobileInput(document.getElementById('walkinMobile'));
 
+  const walkinCustomerStatus = document.getElementById('walkinCustomerStatus');
+  let walkinExistingUser = null;
+
+  function setWalkinCustomerStatus(message, kind) {
+    if (!walkinCustomerStatus) return;
+    walkinCustomerStatus.textContent = message;
+    walkinCustomerStatus.className =
+      kind === 'existing'
+        ? 'form-text text-success'
+        : kind === 'new'
+          ? 'form-text text-primary'
+          : 'form-text';
+  }
+
+  async function lookupWalkinCustomer() {
+    const mobile = document.getElementById('walkinMobile').value.trim();
+    if (!isValidMobile(mobile)) {
+      walkinExistingUser = null;
+      setWalkinCustomerStatus('Enter a 10-digit mobile to check if the customer exists.');
+      return;
+    }
+    try {
+      const data = await api(`/api/admin/customers/lookup?mobile=${encodeURIComponent(mobile)}`);
+      if (data.exists && data.user) {
+        walkinExistingUser = data.user;
+        document.getElementById('walkinName').value = data.user.name || '';
+        document.getElementById('walkinEmail').value = data.user.email || '';
+        setWalkinCustomerStatus(`Existing customer: ${data.user.name} (${data.user.email})`, 'existing');
+      } else {
+        walkinExistingUser = null;
+        setWalkinCustomerStatus('New customer — fill name and email to create an account.', 'new');
+      }
+    } catch (err) {
+      walkinExistingUser = null;
+      setWalkinCustomerStatus(err.message || 'Could not look up customer.');
+    }
+  }
+
+  document.getElementById('walkinMobile').addEventListener('input', () => {
+    const mobile = document.getElementById('walkinMobile').value.trim();
+    if (mobile.length < 10) {
+      walkinExistingUser = null;
+      setWalkinCustomerStatus('Enter a 10-digit mobile to check if the customer exists.');
+    }
+  });
+  document.getElementById('walkinMobile').addEventListener('blur', () => {
+    lookupWalkinCustomer().catch(() => {});
+  });
+  document.getElementById('walkinMobile').addEventListener('change', () => {
+    lookupWalkinCustomer().catch(() => {});
+  });
+
   function todayISO() {
     const d = new Date();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -106,6 +158,8 @@
         'success'
       );
       document.getElementById('walkinForm').reset();
+      walkinExistingUser = null;
+      setWalkinCustomerStatus('Enter a 10-digit mobile to check if the customer exists.');
       walkinDate.value = todayISO();
       walkinSlotStart.value = '';
       walkinTotal.textContent = '—';
@@ -329,12 +383,12 @@
             : '<span class="badge text-bg-primary">Confirmed</span>';
         const actions =
           b.status === 'cancelled'
-            ? `<a class="btn btn-sm btn-outline-secondary" href="/confirmation?id=${encodeURIComponent(b.id)}">View</a>`
-            : `<a class="btn btn-sm btn-outline-secondary me-1" href="/confirmation?id=${encodeURIComponent(b.id)}">View</a>
+            ? `<a class="btn btn-sm btn-outline-secondary" href="/confirmation?id=${encodeURIComponent(b.id)}&from=admin">View</a>`
+            : `<a class="btn btn-sm btn-outline-secondary me-1" href="/confirmation?id=${encodeURIComponent(b.id)}&from=admin">View</a>
                <button class="btn btn-sm btn-outline-success me-1" data-checkin="${escapeHtml(b.id)}">Check-in</button>
                <button class="btn btn-sm btn-outline-danger" data-cancel="${escapeHtml(b.id)}">Cancel</button>`;
         return `<tr>
-          <td><code><a href="/confirmation?id=${encodeURIComponent(b.id)}">${escapeHtml(b.id)}</a></code></td>
+          <td><code><a href="/confirmation?id=${encodeURIComponent(b.id)}&from=admin">${escapeHtml(b.id)}</a></code></td>
           <td>${escapeHtml(b.bookingDate)}</td>
           <td>${escapeHtml(b.slotLabel)}</td>
           <td>${escapeHtml(b.name)}</td>
