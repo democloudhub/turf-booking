@@ -2,10 +2,30 @@ const { createClient } = require('@libsql/client');
 const path = require('path');
 const fs = require('fs');
 
+function isVercel() {
+  return Boolean(process.env.VERCEL || process.env.NOW_REGION);
+}
+
 function resolveUrl() {
-  if (process.env.TURSO_DATABASE_URL) {
-    return process.env.TURSO_DATABASE_URL;
+  const remote =
+    process.env.TURSO_DATABASE_URL ||
+    process.env.LIBSQL_URL ||
+    (process.env.DATABASE_URL && !process.env.DATABASE_URL.startsWith('file:')
+      ? process.env.DATABASE_URL
+      : null);
+
+  if (remote) {
+    return remote;
   }
+
+  if (isVercel()) {
+    const err = new Error(
+      'Missing TURSO_DATABASE_URL. Local SQLite (file:) cannot run on Vercel. Create a free Turso database and set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN in the Vercel project environment variables.'
+    );
+    err.code = 'TURSO_REQUIRED';
+    throw err;
+  }
+
   const url = process.env.DATABASE_URL || 'file:./data/local.db';
   if (url.startsWith('file:')) {
     const filePath = url.replace(/^file:/, '');
@@ -19,15 +39,22 @@ function resolveUrl() {
 }
 
 let client;
+let resolveError = null;
 
 function getDb() {
+  if (resolveError) throw resolveError;
   if (!client) {
-    const url = resolveUrl();
-    const opts = { url };
-    if (process.env.TURSO_AUTH_TOKEN) {
-      opts.authToken = process.env.TURSO_AUTH_TOKEN;
+    try {
+      const url = resolveUrl();
+      const opts = { url };
+      if (process.env.TURSO_AUTH_TOKEN) {
+        opts.authToken = process.env.TURSO_AUTH_TOKEN;
+      }
+      client = createClient(opts);
+    } catch (err) {
+      resolveError = err;
+      throw err;
     }
-    client = createClient(opts);
   }
   return client;
 }
@@ -93,7 +120,6 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(booking_date)
   `);
 
-  // Migrate older local DBs that were created before user_id existed
   try {
     await db.execute('ALTER TABLE bookings ADD COLUMN user_id TEXT');
   } catch {
@@ -115,7 +141,7 @@ async function ensureSchema() {
       'https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=1200'
     ]);
     const defaultRules = [
-      'Wear appropriate sports shoes — no metal studs.',
+      'Wear appropriate sports shoes - no metal studs.',
       'Arrive 10 minutes before your slot.',
       'Cancellations must be made at least 4 hours in advance.',
       'No smoking or alcohol on the premises.',
@@ -147,4 +173,4 @@ async function ensureSchema() {
   }
 }
 
-module.exports = { getDb, ensureSchema };
+module.exports = { getDb, ensureSchema, isVercel };

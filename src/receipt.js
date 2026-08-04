@@ -1,5 +1,4 @@
 const QRCode = require('qrcode');
-const PDFDocument = require('pdfkit');
 const { getVenue, slotLabel } = require('./venue');
 
 async function generateQrDataUrl(bookingId, appUrl) {
@@ -15,6 +14,7 @@ async function generateQrDataUrl(bookingId, appUrl) {
 }
 
 async function buildReceiptPdf(booking) {
+  const PDFDocument = require('pdfkit');
   const venue = await getVenue();
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);

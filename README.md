@@ -82,33 +82,39 @@ Use the Twilio WhatsApp sandbox (`TWILIO_WHATSAPP_FROM=whatsapp:+14155238886`) f
 
 ## Deploy on Vercel + GitHub
 
-1. Create a free [Turso](https://turso.tech) database and copy the URL + token.
-2. Push this repo to GitHub.
-3. Import the repo in [Vercel](https://vercel.com).
-4. Set environment variables in the Vercel project:
+**Required:** Vercel cannot use `file:` SQLite. You must use Turso.
 
-```
-TURSO_DATABASE_URL=libsql://...
-TURSO_AUTH_TOKEN=...
-ADMIN_PASSWORD=...
-ADMIN_SESSION_SECRET=...
-APP_URL=https://your-app.vercel.app
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=...
-SMTP_PASS=...
-SMTP_FROM=...
-TWILIO_ACCOUNT_SID=...
-TWILIO_AUTH_TOKEN=...
-TWILIO_SMS_FROM=...
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
-NOTIFY_ENABLED=true
-NODE_ENV=production
+### 1) Create a Turso database
+
+```bash
+# install CLI: https://docs.turso.tech/cli/installation
+turso auth login
+turso db create turf-booking
+turso db show turf-booking --url
+turso db tokens create turf-booking
 ```
 
-5. Deploy. Schema is created automatically on first request.
+Copy the URL (`libsql://...`) and token.
 
-> Do **not** use a local `file:` database on Vercel — the filesystem is ephemeral. Always use Turso in production.
+### 2) Set Vercel environment variables
+
+In **Vercel → Project → Settings → Environment Variables** (Production + Preview):
+
+| Name | Example |
+|------|---------|
+| `TURSO_DATABASE_URL` | `libsql://turf-booking-xxxx.turso.io` |
+| `TURSO_AUTH_TOKEN` | (token from Turso) |
+| `ADMIN_PASSWORD` | strong password |
+| `ADMIN_SESSION_SECRET` | long random string |
+| `APP_URL` | `https://your-app.vercel.app` |
+
+Optional: SMTP/Twilio + `NOTIFY_ENABLED=true` for messages.
+
+### 3) Redeploy
+
+After saving env vars, trigger a Redeploy (or push to GitHub). Open `/health` — it should return `{ "ok": true, "hasTurso": true }`.
+
+> Without `TURSO_DATABASE_URL`, the site shows a setup page instead of crashing.
 
 ## API overview
 
