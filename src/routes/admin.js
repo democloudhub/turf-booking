@@ -5,7 +5,7 @@ const {
   clearSessionCookie,
   requireAdmin
 } = require('../auth');
-const { changeAdminPassword, getAdminProfile, updateAdminProfile, getGmailConfigPublic, updateGmailConfig } = require('../settings');
+const { changeAdminPassword, getAdminProfile, updateAdminProfile, getResendConfigPublic, updateResendConfig, getResendConfig } = require('../settings');
 const { getVenue, updateVenue } = require('../venue');
 const {
   listBookings,
@@ -68,7 +68,7 @@ router.put('/profile', requireAdmin, async (req, res) => {
 
 router.get('/email', requireAdmin, async (_req, res) => {
   try {
-    res.json(await getGmailConfigPublic());
+    res.json(await getResendConfigPublic());
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to load email settings' });
   }
@@ -76,7 +76,7 @@ router.get('/email', requireAdmin, async (_req, res) => {
 
 router.put('/email', requireAdmin, async (req, res) => {
   try {
-    const config = await updateGmailConfig(req.body);
+    const config = await updateResendConfig(req.body);
     res.json(config);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Failed to update email settings' });
@@ -85,13 +85,16 @@ router.put('/email', requireAdmin, async (req, res) => {
 
 router.post('/email/test', requireAdmin, async (req, res) => {
   try {
-    const { getGmailConfig } = require('../settings');
     const { sendMailTest } = require('../notify/email');
-    const cfg = await getGmailConfig();
+    const cfg = await getResendConfig();
     if (!cfg.configured) {
-      return res.status(400).json({ error: 'Gmail OAuth is not fully configured yet' });
+      return res.status(400).json({ error: 'Resend API is not fully configured yet' });
     }
-    const to = (req.body && req.body.to) || cfg.user;
+    const profile = await getAdminProfile();
+    const to = (req.body && req.body.to) || profile.email;
+    if (!to) {
+      return res.status(400).json({ error: 'Set an admin profile email (or pass to) for the test' });
+    }
     const result = await sendMailTest(to);
     res.json(result);
   } catch (err) {

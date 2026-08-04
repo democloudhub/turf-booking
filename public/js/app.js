@@ -76,7 +76,8 @@ async function renderAuthNav() {
     ? escapeHtml((user.name || 'U').trim().charAt(0).toUpperCase() || 'U')
     : '';
   const html = user
-    ? `<span class="nav-hello">Hello! ${escapeHtml((user.name || '').trim().split(/\s+/)[0] || 'there')}</span>
+    ? `<a class="btn btn-sm btn-turf" href="/book">Book</a>
+       <span class="nav-hello">Hello! ${escapeHtml((user.name || '').trim().split(/\s+/)[0] || 'there')}</span>
        <div class="user-menu">
          <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true" aria-label="${escapeHtml(user.name)} account menu" title="${escapeHtml(user.name)}">
            <span class="user-avatar" aria-hidden="true">${initial}</span>
@@ -87,8 +88,7 @@ async function renderAuthNav() {
            <li role="none"><a role="menuitem" href="/account?tab=password">Change Password</a></li>
            <li role="none"><button type="button" role="menuitem" data-logout>Logout</button></li>
          </ul>
-       </div>
-       <a class="btn btn-sm btn-turf" href="/book">Book</a>`
+       </div>`
     : `<a class="nav-link text-white" href="/availability">Availability</a>
        <a class="btn btn-sm btn-turf" href="${loginUrl('/book')}">Book</a>`;
 

@@ -17,7 +17,7 @@
     try {
       const me = await api('/api/admin/me');
       showAdmin(me.profile);
-      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadGmailForm(), refreshPushStatus()]);
+      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadEmailForm(), refreshPushStatus()]);
       return true;
     } catch {
       showLogin();
@@ -59,7 +59,7 @@
       });
       const me = await api('/api/admin/me');
       showAdmin(me.profile);
-      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadGmailForm(), refreshPushStatus()]);
+      await Promise.all([loadBookings(), loadVenueForm(), loadProfileForm(me.profile), loadEmailForm(), refreshPushStatus()]);
     } catch (err) {
       showAlert(alertBox, err.message);
     }
@@ -361,54 +361,44 @@
     }
   });
 
-  async function loadGmailForm() {
-    const statusEl = document.getElementById('gmailStatus');
+  async function loadEmailForm() {
+    const statusEl = document.getElementById('emailStatus');
     try {
       const cfg = await api('/api/admin/email');
-      document.getElementById('gmailUser').value = cfg.user || '';
-      document.getElementById('gmailFrom').value = cfg.from || '';
-      document.getElementById('gmailClientId').value = cfg.clientId || '';
-      document.getElementById('gmailClientSecret').value = '';
-      document.getElementById('gmailClientSecret').placeholder = cfg.hasClientSecret
+      document.getElementById('resendFrom').value = cfg.from || 'Turf Booking <onboarding@resend.dev>';
+      document.getElementById('resendApiKey').value = '';
+      document.getElementById('resendApiKey').placeholder = cfg.hasApiKey
         ? 'Saved — leave blank to keep'
-        : 'Paste OAuth client secret';
-      document.getElementById('gmailRefreshToken').value = '';
-      document.getElementById('gmailRefreshToken').placeholder = cfg.hasRefreshToken
-        ? 'Saved — leave blank to keep'
-        : 'Paste OAuth refresh token';
+        : 're_...';
       if (statusEl) {
         statusEl.textContent = cfg.configured
-          ? `Gmail OAuth is configured for ${cfg.user}.`
-          : 'Gmail OAuth is not configured yet.';
+          ? `Resend is configured. From: ${cfg.from}`
+          : 'Resend is not configured yet.';
       }
     } catch (err) {
       if (statusEl) statusEl.textContent = err.message;
     }
   }
 
-  document.getElementById('gmailForm').addEventListener('submit', async (e) => {
+  document.getElementById('emailForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     alertBox.innerHTML = '';
     try {
       const payload = {
-        user: document.getElementById('gmailUser').value.trim(),
-        from: document.getElementById('gmailFrom').value.trim(),
-        clientId: document.getElementById('gmailClientId').value.trim()
+        from: document.getElementById('resendFrom').value.trim()
       };
-      const secret = document.getElementById('gmailClientSecret').value.trim();
-      const refresh = document.getElementById('gmailRefreshToken').value.trim();
-      if (secret) payload.clientSecret = secret;
-      if (refresh) payload.refreshToken = refresh;
+      const apiKey = document.getElementById('resendApiKey').value.trim();
+      if (apiKey) payload.apiKey = apiKey;
       const cfg = await api('/api/admin/email', {
         method: 'PUT',
         body: JSON.stringify(payload)
       });
-      await loadGmailForm();
+      await loadEmailForm();
       showAlert(
         alertBox,
         cfg.configured
-          ? 'Gmail OAuth settings saved. Emails will send without passwords.'
-          : 'Gmail settings saved, but configuration is still incomplete.',
+          ? 'Resend settings saved. Booking emails will use the Resend API.'
+          : 'Email settings saved, but configuration is still incomplete.',
         'success'
       );
     } catch (err) {
@@ -416,15 +406,15 @@
     }
   });
 
-  document.getElementById('gmailTestBtn').addEventListener('click', async () => {
+  document.getElementById('emailTestBtn').addEventListener('click', async () => {
     alertBox.innerHTML = '';
     try {
       const result = await api('/api/admin/email/test', {
         method: 'POST',
-        body: JSON.stringify({ to: document.getElementById('gmailUser').value.trim() })
+        body: '{}'
       });
       if (result.ok) {
-        showAlert(alertBox, 'Test email sent. Check your inbox.', 'success');
+        showAlert(alertBox, 'Test email sent to your admin profile address.', 'success');
       } else if (result.skipped) {
         showAlert(alertBox, `Test skipped: ${result.reason || 'not configured'}`);
       } else {

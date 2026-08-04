@@ -68,10 +68,10 @@ async function ensureAdminProfileSeeded() {
   if (!name && process.env.ADMIN_NAME) {
     await setSetting('admin_name', String(process.env.ADMIN_NAME).trim());
   }
-  if (!email && (process.env.ADMIN_EMAIL || process.env.GMAIL_USER || process.env.SMTP_USER)) {
+  if (!email && (process.env.ADMIN_EMAIL || process.env.SMTP_USER)) {
     await setSetting(
       'admin_email',
-      String(process.env.ADMIN_EMAIL || process.env.GMAIL_USER || process.env.SMTP_USER).trim()
+      String(process.env.ADMIN_EMAIL || process.env.SMTP_USER).trim()
     );
   }
   if (!mobile && process.env.ADMIN_MOBILE) {
@@ -122,13 +122,16 @@ async function updateAdminProfile({ name, email, mobile }) {
   return getAdminProfile();
 }
 
-async function ensureGmailConfigSeeded() {
+async function ensureResendConfigSeeded() {
   const keys = [
-    ['gmail_user', process.env.GMAIL_USER || process.env.SMTP_USER],
-    ['gmail_client_id', process.env.GMAIL_CLIENT_ID],
-    ['gmail_client_secret', process.env.GMAIL_CLIENT_SECRET],
-    ['gmail_refresh_token', process.env.GMAIL_REFRESH_TOKEN],
-    ['gmail_from', process.env.GMAIL_FROM || process.env.SMTP_FROM]
+    ['resend_api_key', process.env.RESEND_API_KEY],
+    [
+      'resend_from',
+      process.env.RESEND_FROM ||
+        process.env.GMAIL_FROM ||
+        process.env.SMTP_FROM ||
+        'Turf Booking <onboarding@resend.dev>'
+    ]
   ];
   for (const [key, value] of keys) {
     if (!value) continue;
@@ -137,97 +140,63 @@ async function ensureGmailConfigSeeded() {
   }
 }
 
-async function getGmailConfig() {
-  await ensureGmailConfigSeeded();
-  const [user, clientId, clientSecret, refreshToken, from] = await Promise.all([
-    getSetting('gmail_user'),
-    getSetting('gmail_client_id'),
-    getSetting('gmail_client_secret'),
-    getSetting('gmail_refresh_token'),
-    getSetting('gmail_from')
+async function getResendConfig() {
+  await ensureResendConfigSeeded();
+  const [apiKey, from] = await Promise.all([
+    getSetting('resend_api_key'),
+    getSetting('resend_from')
   ]);
 
-  const resolvedUser =
-    user || process.env.GMAIL_USER || process.env.SMTP_USER || '';
-  const resolvedClientId = clientId || process.env.GMAIL_CLIENT_ID || '';
-  const resolvedClientSecret = clientSecret || process.env.GMAIL_CLIENT_SECRET || '';
-  const resolvedRefreshToken = refreshToken || process.env.GMAIL_REFRESH_TOKEN || '';
+  const resolvedKey = apiKey || process.env.RESEND_API_KEY || '';
   const resolvedFrom =
     from ||
+    process.env.RESEND_FROM ||
     process.env.GMAIL_FROM ||
     process.env.SMTP_FROM ||
-    (resolvedUser ? `Turf Booking <${resolvedUser}>` : '');
+    'Turf Booking <onboarding@resend.dev>';
 
   return {
-    user: resolvedUser,
-    clientId: resolvedClientId,
-    clientSecret: resolvedClientSecret,
-    refreshToken: resolvedRefreshToken,
+    apiKey: resolvedKey,
     from: resolvedFrom,
-    configured: Boolean(
-      resolvedUser && resolvedClientId && resolvedClientSecret && resolvedRefreshToken
-    )
+    configured: Boolean(resolvedKey && resolvedFrom)
   };
 }
 
-async function getGmailConfigPublic() {
-  const cfg = await getGmailConfig();
+async function getResendConfigPublic() {
+  const cfg = await getResendConfig();
   return {
-    user: cfg.user,
-    clientId: cfg.clientId,
     from: cfg.from,
-    hasClientSecret: Boolean(cfg.clientSecret),
-    hasRefreshToken: Boolean(cfg.refreshToken),
+    hasApiKey: Boolean(cfg.apiKey),
     configured: cfg.configured
   };
 }
 
-async function updateGmailConfig(patch = {}) {
-  const current = await getGmailConfig();
-  const nextUser = patch.user !== undefined ? String(patch.user || '').trim() : current.user;
-  const nextClientId =
-    patch.clientId !== undefined ? String(patch.clientId || '').trim() : current.clientId;
-  const nextFrom = patch.from !== undefined ? String(patch.from || '').trim() : current.from;
+async function updateResendConfig(patch = {}) {
+  const current = await getResendConfig();
+  const nextFrom =
+    patch.from !== undefined ? String(patch.from || '').trim() : current.from;
 
-  let nextClientSecret = current.clientSecret;
-  if (patch.clientSecret !== undefined && String(patch.clientSecret).trim()) {
-    nextClientSecret = String(patch.clientSecret).trim();
+  let nextApiKey = current.apiKey;
+  if (patch.apiKey !== undefined && String(patch.apiKey).trim()) {
+    nextApiKey = String(patch.apiKey).trim();
   }
 
-  let nextRefreshToken = current.refreshToken;
-  if (patch.refreshToken !== undefined && String(patch.refreshToken).trim()) {
-    nextRefreshToken = String(patch.refreshToken).trim();
-  }
-
-  if (!nextUser || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextUser)) {
-    const err = new Error('A valid Gmail address is required');
+  if (!nextApiKey) {
+    const err = new Error('Resend API key is required');
     err.status = 400;
     throw err;
   }
-  if (!nextClientId) {
-    const err = new Error('Gmail OAuth Client ID is required');
-    err.status = 400;
-    throw err;
-  }
-  if (!nextClientSecret) {
-    const err = new Error('Gmail OAuth Client Secret is required');
-    err.status = 400;
-    throw err;
-  }
-  if (!nextRefreshToken) {
-    const err = new Error('Gmail OAuth Refresh Token is required');
+  if (!nextFrom) {
+    const err = new Error('From address is required (e.g. Turf Booking <onboarding@resend.dev>)');
     err.status = 400;
     throw err;
   }
 
   await Promise.all([
-    setSetting('gmail_user', nextUser),
-    setSetting('gmail_client_id', nextClientId),
-    setSetting('gmail_client_secret', nextClientSecret),
-    setSetting('gmail_refresh_token', nextRefreshToken),
-    setSetting('gmail_from', nextFrom || `Turf Booking <${nextUser}>`)
+    setSetting('resend_api_key', nextApiKey),
+    setSetting('resend_from', nextFrom)
   ]);
-  return getGmailConfigPublic();
+  return getResendConfigPublic();
 }
 
 module.exports = {
@@ -235,12 +204,12 @@ module.exports = {
   setSetting,
   ensureAdminPasswordSeeded,
   ensureAdminProfileSeeded,
-  ensureGmailConfigSeeded,
+  ensureResendConfigSeeded,
   verifyAdminPassword,
   changeAdminPassword,
   getAdminProfile,
   updateAdminProfile,
-  getGmailConfig,
-  getGmailConfigPublic,
-  updateGmailConfig
+  getResendConfig,
+  getResendConfigPublic,
+  updateResendConfig
 };

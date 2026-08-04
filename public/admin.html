@@ -160,7 +160,7 @@
               <div class="mb-3">
                 <label class="form-label" for="adminEmail">Email</label>
                 <input type="email" id="adminEmail" name="email" class="form-control" required>
-                <div class="form-text">Booking alert emails are delivered here.</div>
+                <div class="form-text">Any email address — booking alert emails are delivered here.</div>
               </div>
               <div class="mb-3">
                 <label class="form-label" for="adminMobile">Mobile</label>
@@ -206,41 +206,29 @@
           </div>
           <hr>
           <div>
-            <strong>Gmail OAuth (no passwords)</strong>
+            <strong>Resend email</strong>
             <p class="small text-muted mb-2">
-              Emails use a Gmail OAuth refresh token — not an account password or app password.
-              Create an OAuth client in Google Cloud, enable Gmail API, then run
-              <code>npm run gmail-oauth</code> locally to get the refresh token.
+              Get a free API key at <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a>.
+              Until you verify your own domain, use <code>Turf Booking &lt;onboarding@resend.dev&gt;</code>
+              (can send to your Resend signup email only).
             </p>
-            <p class="small mb-3" id="gmailStatus">Checking email configuration…</p>
-            <form id="gmailForm">
+            <p class="small mb-3" id="emailStatus">Checking email configuration…</p>
+            <form id="emailForm">
               <div class="mb-3">
-                <label class="form-label" for="gmailUser">Gmail address</label>
-                <input type="email" id="gmailUser" class="form-control" required placeholder="you@gmail.com">
+                <label class="form-label" for="resendFrom">From address</label>
+                <input id="resendFrom" class="form-control" required placeholder="Turf Booking &lt;onboarding@resend.dev&gt;">
               </div>
               <div class="mb-3">
-                <label class="form-label" for="gmailFrom">From display</label>
-                <input id="gmailFrom" class="form-control" placeholder='GreenField Turf &lt;you@gmail.com&gt;'>
-              </div>
-              <div class="mb-3">
-                <label class="form-label" for="gmailClientId">OAuth Client ID</label>
-                <input id="gmailClientId" class="form-control" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label" for="gmailClientSecret">OAuth Client Secret</label>
-                <input id="gmailClientSecret" class="form-control" placeholder="Leave blank to keep existing">
-              </div>
-              <div class="mb-3">
-                <label class="form-label" for="gmailRefreshToken">OAuth Refresh Token</label>
-                <textarea id="gmailRefreshToken" class="form-control" rows="2" placeholder="Leave blank to keep existing"></textarea>
+                <label class="form-label" for="resendApiKey">Resend API key</label>
+                <input id="resendApiKey" class="form-control" placeholder="re_... (leave blank to keep existing)">
               </div>
               <div class="d-flex flex-wrap gap-2">
                 <button class="btn btn-turf" type="submit">Save email settings</button>
-                <button class="btn btn-outline-secondary" type="button" id="gmailTestBtn">Send test email</button>
+                <button class="btn btn-outline-secondary" type="button" id="emailTestBtn">Send test email</button>
               </div>
             </form>
             <p class="small text-muted mt-3 mb-0">
-              Booking alerts still go to the address saved in <strong>Profile</strong>.
+              Booking alerts go to the address saved in <strong>Profile</strong> (any email). Test email uses that address too.
             </p>
           </div>
         </div>

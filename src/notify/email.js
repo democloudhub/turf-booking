@@ -1,28 +1,8 @@
-const nodemailer = require('nodemailer');
 const { getVenue, slotLabel } = require('../venue');
-const { getGmailConfig } = require('../settings');
+const { getResendConfig } = require('../settings');
 
 function notificationsEnabled() {
   return String(process.env.NOTIFY_ENABLED || 'false').toLowerCase() === 'true';
-}
-
-async function createTransport() {
-  const cfg = await getGmailConfig();
-  if (!cfg.configured) {
-    return null;
-  }
-
-  // Gmail OAuth2 only — no account passwords / app passwords.
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      type: 'OAuth2',
-      user: cfg.user,
-      clientId: cfg.clientId,
-      clientSecret: cfg.clientSecret,
-      refreshToken: cfg.refreshToken
-    }
-  });
 }
 
 function bookingSummary(booking, venue) {
@@ -44,7 +24,6 @@ async function sendBookingEmail(booking) {
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const { generateQrDataUrl } = require('../receipt');
   const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
-  const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64');
 
   const subject = `Booking Confirmed — ${info.bookingId} | ${info.venueName}`;
   const text = [
@@ -80,7 +59,7 @@ async function sendBookingEmail(booking) {
       </table>
       <div style="text-align:center;margin:20px 0;padding:16px;border:1px solid #c8e6c9;border-radius:8px;background:#f7fbf7">
         <p style="margin:0 0 10px;font-weight:700;color:#1b5e20">Check-in QR Code</p>
-        <img src="cid:booking-qr" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto" />
+        <img src="${qrDataUrl}" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto" />
         <p style="margin:10px 0 0;color:#555;font-size:13px">Show this QR or Booking ID at the venue</p>
       </div>
       <p><a href="${escapeHtml(appUrl.replace(/\/$/, ''))}/confirmation?id=${escapeHtml(info.bookingId)}">Open confirmation page</a></p>
@@ -94,15 +73,7 @@ async function sendBookingEmail(booking) {
     text,
     html,
     channel: 'email',
-    bypassFlag: true,
-    attachments: [
-      {
-        filename: `qr-${booking.id}.png`,
-        content: qrBuffer,
-        cid: 'booking-qr',
-        contentType: 'image/png'
-      }
-    ]
+    bypassFlag: true
   });
 }
 
@@ -211,17 +182,12 @@ async function sendCheckedInEmail(booking) {
 async function sendAdminBookingEmail(booking) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
-  const { getAdminProfile, getGmailConfig } = require('../settings');
+  const { getAdminProfile } = require('../settings');
   const profile = await getAdminProfile();
-  const gmail = await getGmailConfig();
-  const to =
-    profile.email ||
-    process.env.ADMIN_EMAIL ||
-    venue.contactEmail ||
-    gmail.user;
+  const to = profile.email || process.env.ADMIN_EMAIL || venue.contactEmail;
 
   if (!to) {
-    console.warn('[admin-email] Admin profile email / ADMIN_EMAIL / venue contact / Gmail user not set');
+    console.warn('[admin-email] Admin profile email / ADMIN_EMAIL / venue contact not set');
     return { skipped: true, channel: 'admin-email', reason: 'no_admin_email' };
   }
 
@@ -271,30 +237,45 @@ async function sendAdminBookingEmail(booking) {
   });
 }
 
-async function sendMail({ to, subject, text, html, channel, bypassFlag = false, attachments = [] }) {
-  // Emails (customer + admin) send whenever Gmail OAuth is configured.
+async function sendMail({ to, subject, text, html, channel, bypassFlag = false }) {
+  // Emails (customer + admin) send whenever Resend is configured.
   // SMS/WhatsApp still use notificationsEnabled() in their own senders.
   if (!bypassFlag && !notificationsEnabled()) {
     console.log(`[${channel} skipped]`, { to, subject });
     return { skipped: true, channel };
   }
 
-  const transporter = await createTransport();
-  if (!transporter) {
-    console.warn(`[${channel}] Gmail OAuth not configured`);
+  const cfg = await getResendConfig();
+  if (!cfg.configured) {
+    console.warn(`[${channel}] Resend API not configured`);
     return { skipped: true, channel, reason: 'not_configured' };
   }
 
-  const cfg = await getGmailConfig();
-  await transporter.sendMail({
-    from: cfg.from || cfg.user,
-    to,
-    subject,
-    text,
-    html,
-    attachments
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: cfg.from,
+      to: [to],
+      subject,
+      text,
+      html
+    })
   });
-  return { ok: true, channel };
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = body.message || body.error || `Resend HTTP ${res.status}`;
+    console.error(`[${channel}] Resend failed`, message);
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
+  }
+
+  return { ok: true, channel, id: body.id };
 }
 
 function escapeHtml(str) {
@@ -306,17 +287,22 @@ function escapeHtml(str) {
 }
 
 async function sendMailTest(to) {
-  const cfg = await getGmailConfig();
+  const cfg = await getResendConfig();
   if (!cfg.configured) {
-    const err = new Error('Gmail OAuth is not configured');
+    const err = new Error('Resend API is not configured');
+    err.status = 400;
+    throw err;
+  }
+  if (!to) {
+    const err = new Error('A destination email is required for the test');
     err.status = 400;
     throw err;
   }
   return sendMail({
     to,
-    subject: 'Turf Booking — Gmail OAuth test',
-    text: 'Gmail OAuth email is working for Turf Booking.',
-    html: '<p>Gmail OAuth email is working for <strong>Turf Booking</strong>.</p>',
+    subject: 'Turf Booking — Resend test',
+    text: 'Resend email is working for Turf Booking.',
+    html: '<p>Resend email is working for <strong>Turf Booking</strong>.</p>',
     channel: 'email-test',
     bypassFlag: true
   });
