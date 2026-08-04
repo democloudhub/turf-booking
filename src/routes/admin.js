@@ -14,6 +14,11 @@ const {
   cancelBooking
 } = require('../bookings');
 const { sendAllCancellations } = require('../notify');
+const {
+  getVapidPublicKey,
+  saveSubscription,
+  removeSubscription
+} = require('../notify/push');
 
 const router = express.Router();
 
@@ -37,6 +42,33 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireAdmin, (_req, res) => {
   res.json({ ok: true, role: 'admin' });
+});
+
+router.get('/push/vapid-public-key', requireAdmin, async (_req, res) => {
+  try {
+    const publicKey = await getVapidPublicKey();
+    res.json({ publicKey });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to load VAPID key' });
+  }
+});
+
+router.post('/push/subscribe', requireAdmin, async (req, res) => {
+  try {
+    await saveSubscription(req.body.subscription || req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save subscription' });
+  }
+});
+
+router.post('/push/unsubscribe', requireAdmin, async (req, res) => {
+  try {
+    await removeSubscription(req.body.endpoint);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to remove subscription' });
+  }
 });
 
 router.post('/change-password', requireAdmin, async (req, res) => {

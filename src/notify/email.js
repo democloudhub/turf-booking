@@ -120,8 +120,68 @@ async function sendCancellationEmail(booking, reason) {
   return sendMail({ to: booking.email, subject, text, html, channel: 'email' });
 }
 
-async function sendMail({ to, subject, text, html, channel }) {
-  if (!notificationsEnabled()) {
+async function sendAdminBookingEmail(booking) {
+  const venue = await getVenue();
+  const info = bookingSummary(booking, venue);
+  const to =
+    process.env.ADMIN_EMAIL ||
+    venue.contactEmail ||
+    process.env.SMTP_USER;
+
+  if (!to) {
+    console.warn('[admin-email] ADMIN_EMAIL / venue contact / SMTP_USER not set');
+    return { skipped: true, channel: 'admin-email', reason: 'no_admin_email' };
+  }
+
+  const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+  const subject = `New booking ${info.bookingId} — ${info.venueName}`;
+  const text = [
+    `New turf booking received.`,
+    '',
+    `Booking ID: ${info.bookingId}`,
+    `Customer: ${info.name}`,
+    `Mobile: ${booking.mobile}`,
+    `Email: ${booking.email}`,
+    `Date: ${info.date}`,
+    `Slot: ${info.slot}`,
+    `Amount: ₹${info.amount}`,
+    booking.notes ? `Notes: ${booking.notes}` : null,
+    '',
+    appUrl ? `Admin: ${appUrl}/admin` : null
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
+      <h2 style="color:#1b5e20">New Booking</h2>
+      <p>A customer just booked a slot.</p>
+      <table style="border-collapse:collapse;width:100%;margin:16px 0">
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.bookingId)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Customer</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.name)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Mobile</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(booking.mobile)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Email</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(booking.email)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Date</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.date)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.slot)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #ddd"><strong>Amount</strong></td><td style="padding:8px;border:1px solid #ddd">₹${info.amount}</td></tr>
+      </table>
+      ${appUrl ? `<p><a href="${escapeHtml(appUrl)}/admin">Open Admin</a></p>` : ''}
+    </div>
+  `;
+
+  return sendMail({
+    to,
+    subject,
+    text,
+    html,
+    channel: 'admin-email',
+    bypassFlag: true
+  });
+}
+
+async function sendMail({ to, subject, text, html, channel, bypassFlag = false }) {
+  // Customer notifications respect NOTIFY_ENABLED; admin alerts send whenever SMTP works.
+  if (!bypassFlag && !notificationsEnabled()) {
     console.log(`[${channel} skipped]`, { to, subject });
     return { skipped: true, channel };
   }
@@ -153,5 +213,6 @@ function escapeHtml(str) {
 module.exports = {
   sendBookingEmail,
   sendCancellationEmail,
+  sendAdminBookingEmail,
   notificationsEnabled
 };

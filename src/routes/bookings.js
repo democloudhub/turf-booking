@@ -6,7 +6,7 @@ const {
 } = require('../bookings');
 const { findUserById, mapUser } = require('../users');
 const { requireUser, optionalUser } = require('../auth');
-const { sendAllConfirmations } = require('../notify');
+const { sendAllConfirmations, notifyAdminNewBooking } = require('../notify');
 const { generateQrDataUrl, buildReceiptPdf } = require('../receipt');
 
 const router = express.Router();
@@ -41,14 +41,18 @@ router.post('/', requireUser, async (req, res) => {
       notes: req.body.notes
     });
 
-    const notifications = await sendAllConfirmations(booking);
+    const [notifications, adminNotifications] = await Promise.all([
+      sendAllConfirmations(booking),
+      notifyAdminNewBooking(booking)
+    ]);
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
     const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
 
     res.status(201).json({
       booking,
       qrDataUrl,
-      notifications
+      notifications,
+      adminNotifications
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Booking failed' });

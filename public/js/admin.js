@@ -11,7 +11,7 @@
     try {
       await api('/api/admin/me');
       showAdmin();
-      await Promise.all([loadBookings(), loadVenueForm()]);
+      await Promise.all([loadBookings(), loadVenueForm(), refreshPushStatus()]);
       return true;
     } catch {
       showLogin();
@@ -40,7 +40,7 @@
         body: JSON.stringify({ password: document.getElementById('password').value })
       });
       showAdmin();
-      await Promise.all([loadBookings(), loadVenueForm()]);
+      await Promise.all([loadBookings(), loadVenueForm(), refreshPushStatus()]);
     } catch (err) {
       showAlert(alertBox, err.message);
     }
@@ -56,7 +56,7 @@
       document.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
-      ['bookings', 'checkin', 'venue', 'security'].forEach((name) => {
+      ['bookings', 'checkin', 'venue', 'security', 'notifications'].forEach((name) => {
         document.getElementById(`tab-${name}`).hidden = name !== tab;
       });
     });
@@ -247,6 +247,97 @@
       showAlert(alertBox, err.message);
     }
   });
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const output = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+    return output;
+  }
+
+  async function refreshPushStatus() {
+    const statusEl = document.getElementById('pushStatus');
+    if (!statusEl) return;
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      statusEl.textContent = 'Push notifications are not supported in this browser.';
+      return;
+    }
+    const permission = Notification.permission;
+    let subscribed = false;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      subscribed = Boolean(sub);
+    } catch {
+      subscribed = false;
+    }
+    if (permission === 'granted' && subscribed) {
+      statusEl.textContent = 'Chrome notifications are enabled on this browser.';
+    } else if (permission === 'denied') {
+      statusEl.textContent = 'Notifications are blocked. Allow them in Chrome site settings.';
+    } else {
+      statusEl.textContent = 'Chrome notifications are not enabled yet.';
+    }
+  }
+
+  async function enablePush() {
+    alertBox.innerHTML = '';
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      showAlert(alertBox, 'Push notifications are not supported in this browser. Use Chrome.');
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        showAlert(alertBox, 'Notification permission was not granted.');
+        await refreshPushStatus();
+        return;
+      }
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+      const { publicKey } = await api('/api/admin/push/vapid-public-key');
+      let subscription = await reg.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+      }
+      await api('/api/admin/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ subscription })
+      });
+      showAlert(alertBox, 'Chrome notifications enabled for new bookings.', 'success');
+      await refreshPushStatus();
+    } catch (err) {
+      showAlert(alertBox, err.message || 'Failed to enable notifications');
+      await refreshPushStatus();
+    }
+  }
+
+  async function disablePush() {
+    alertBox.innerHTML = '';
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if (sub) {
+        await api('/api/admin/push/unsubscribe', {
+          method: 'POST',
+          body: JSON.stringify({ endpoint: sub.endpoint })
+        });
+        await sub.unsubscribe();
+      }
+      showAlert(alertBox, 'Chrome notifications disabled on this browser.', 'success');
+    } catch (err) {
+      showAlert(alertBox, err.message || 'Failed to disable notifications');
+    }
+    await refreshPushStatus();
+  }
+
+  document.getElementById('enablePushBtn').addEventListener('click', enablePush);
+  document.getElementById('disablePushBtn').addEventListener('click', disablePush);
 
   checkAuth();
 })();

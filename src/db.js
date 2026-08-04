@@ -130,8 +130,19 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id)
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+
   const { ensureAdminPasswordSeeded } = require('./settings');
   await ensureAdminPasswordSeeded();
+  const { ensureVapidKeys } = require('./notify/push');
+  await ensureVapidKeys();
 
   const existing = await db.execute('SELECT id FROM venue WHERE id = 1');
   if (existing.rows.length === 0) {

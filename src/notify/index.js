@@ -1,5 +1,11 @@
 const { getVenue, slotLabel } = require('../venue');
-const { notificationsEnabled, sendBookingEmail, sendCancellationEmail } = require('./email');
+const {
+  notificationsEnabled,
+  sendBookingEmail,
+  sendCancellationEmail,
+  sendAdminBookingEmail
+} = require('./email');
+const { sendAdminBookingPush } = require('./push');
 
 function getTwilioClient() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -111,9 +117,9 @@ async function sendCancellationWhatsApp(booking, reason) {
   );
 }
 
-function settleResults(results) {
+function settleResults(results, channels) {
   return results.map((r, i) => {
-    const channel = ['email', 'sms', 'whatsapp'][i];
+    const channel = channels[i];
     if (r.status === 'fulfilled') return r.value;
     console.error(`[${channel}] failed`, r.reason);
     return {
@@ -130,7 +136,7 @@ async function sendAllConfirmations(booking) {
     sendBookingSms(booking),
     sendBookingWhatsApp(booking)
   ]);
-  return settleResults(results);
+  return settleResults(results, ['email', 'sms', 'whatsapp']);
 }
 
 async function sendAllCancellations(booking, reason) {
@@ -139,7 +145,15 @@ async function sendAllCancellations(booking, reason) {
     sendCancellationSms(booking, reason),
     sendCancellationWhatsApp(booking, reason)
   ]);
-  return settleResults(results);
+  return settleResults(results, ['email', 'sms', 'whatsapp']);
+}
+
+async function notifyAdminNewBooking(booking) {
+  const results = await Promise.allSettled([
+    sendAdminBookingEmail(booking),
+    sendAdminBookingPush(booking)
+  ]);
+  return settleResults(results, ['admin-email', 'push']);
 }
 
 module.exports = {
@@ -147,5 +161,6 @@ module.exports = {
   sendBookingWhatsApp,
   sendAllConfirmations,
   sendAllCancellations,
+  notifyAdminNewBooking,
   normalizeMobile
 };

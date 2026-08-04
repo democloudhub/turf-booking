@@ -37,6 +37,7 @@
         <li class="nav-item"><button class="nav-link" data-tab="checkin" type="button">QR Check-in</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="venue" type="button">Venue &amp; Pricing</button></li>
         <li class="nav-item"><button class="nav-link" data-tab="security" type="button">Password</button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="notifications" type="button">Notifications</button></li>
       </ul>
 
       <div id="tab-bookings">
@@ -160,6 +161,30 @@
           </div>
           <button class="btn btn-turf" type="submit">Update password</button>
         </form>
+      </div>
+
+      <div id="tab-notifications" hidden>
+        <div class="form-panel" style="max-width:560px">
+          <h2 class="h4 mb-3">Admin Notifications</h2>
+          <p class="text-muted">Get Chrome push alerts and email when a customer books a slot.</p>
+          <div class="mb-3">
+            <strong>Chrome push</strong>
+            <p class="small text-muted mb-2">Works in Chrome on this device/browser. Keep this admin tab permission allowed.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-turf" id="enablePushBtn">Enable Chrome notifications</button>
+              <button type="button" class="btn btn-outline-secondary" id="disablePushBtn">Disable</button>
+            </div>
+            <p class="small mt-2 mb-0" id="pushStatus">Checking notification status…</p>
+          </div>
+          <hr>
+          <div>
+            <strong>Email alerts</strong>
+            <p class="small text-muted mb-0">
+              New bookings are emailed to <code>ADMIN_EMAIL</code> (or venue contact / SMTP user).
+              Configure SMTP in Vercel env vars for delivery.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   </main>
