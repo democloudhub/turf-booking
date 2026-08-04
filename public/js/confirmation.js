@@ -82,29 +82,29 @@
 
     const qrWrap = document.getElementById('qrWrap');
     const pdfBtn = document.getElementById('pdfBtn');
+    const customerActions = document.getElementById('customerActions');
+    const adminActions = document.getElementById('adminActions');
+
     if (b.status === 'cancelled') {
       qrWrap.hidden = true;
-      pdfBtn.hidden = true;
       document.getElementById('confirmHint').textContent = b.cancelReason
         ? `This booking was cancelled. Reason: ${b.cancelReason}`
         : 'This booking was cancelled.';
     } else if (b.checkedIn) {
       qrWrap.hidden = false;
-      pdfBtn.hidden = false;
       document.getElementById('confirmHint').textContent = 'Checked in at the venue.';
     } else {
       qrWrap.hidden = false;
-      pdfBtn.hidden = false;
       document.getElementById('confirmHint').textContent = showAdminTools
         ? 'Admin view — you can check in or cancel this booking.'
         : 'Show this QR code at the venue for check-in.';
     }
 
-    const customerActions = document.getElementById('customerActions');
-    const adminActions = document.getElementById('adminActions');
     if (showAdminTools) {
+      // Admin view: Check-in / Cancel / Back to Admin only — no PDF download.
       customerActions.hidden = true;
       adminActions.hidden = false;
+      pdfBtn.hidden = true;
       const canAct = b.status !== 'cancelled';
       document.getElementById('adminCheckinBtn').disabled = !canAct || Boolean(b.checkedIn);
       document.getElementById('adminCancelBtn').disabled = !canAct;
@@ -112,6 +112,7 @@
     } else {
       customerActions.hidden = false;
       adminActions.hidden = true;
+      pdfBtn.hidden = b.status === 'cancelled';
     }
 
     if (data.notifications) {
