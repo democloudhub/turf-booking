@@ -13,6 +13,20 @@ function mapUser(row) {
   };
 }
 
+function normalizeMobileInput(mobile) {
+  return String(mobile || '').replace(/\D/g, '');
+}
+
+function assertValidMobile(mobile) {
+  const digits = normalizeMobileInput(mobile);
+  if (!/^\d{10}$/.test(digits)) {
+    const err = new Error('Mobile number must be exactly 10 digits');
+    err.status = 400;
+    throw err;
+  }
+  return digits;
+}
+
 async function findUserByEmail(email) {
   const db = getDb();
   const result = await db.execute({
@@ -50,6 +64,8 @@ async function registerUser({ name, email, mobile, password }) {
     throw err;
   }
 
+  const mobileDigits = assertValidMobile(mobile);
+
   const existing = await findUserByEmail(normalizedEmail);
   if (existing) {
     const err = new Error('An account with this email already exists');
@@ -67,7 +83,7 @@ async function registerUser({ name, email, mobile, password }) {
       id,
       String(name).trim(),
       normalizedEmail,
-      String(mobile).trim(),
+      mobileDigits,
       hashPassword(password),
       createdAt
     ]
@@ -92,12 +108,43 @@ async function updateUserProfile(userId, { name, mobile }) {
     err.status = 400;
     throw err;
   }
+  const mobileDigits = assertValidMobile(mobile);
   const db = getDb();
   await db.execute({
     sql: 'UPDATE users SET name = ?, mobile = ? WHERE id = ?',
-    args: [String(name).trim(), String(mobile).trim(), userId]
+    args: [String(name).trim(), mobileDigits, userId]
   });
   return mapUser(await findUserById(userId));
+}
+
+async function changeUserPassword(userId, currentPassword, newPassword) {
+  if (!currentPassword || !newPassword) {
+    const err = new Error('Current and new password are required');
+    err.status = 400;
+    throw err;
+  }
+  if (String(newPassword).length < 6) {
+    const err = new Error('New password must be at least 6 characters');
+    err.status = 400;
+    throw err;
+  }
+  const row = await findUserById(userId);
+  if (!row) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+  if (!verifyPassword(currentPassword, row.password_hash)) {
+    const err = new Error('Current password is incorrect');
+    err.status = 401;
+    throw err;
+  }
+  const db = getDb();
+  await db.execute({
+    sql: 'UPDATE users SET password_hash = ? WHERE id = ?',
+    args: [hashPassword(newPassword), userId]
+  });
+  return true;
 }
 
 module.exports = {
@@ -106,5 +153,7 @@ module.exports = {
   findUserById,
   findUserByEmail,
   updateUserProfile,
+  changeUserPassword,
+  assertValidMobile,
   mapUser
 };

@@ -66,9 +66,19 @@ async function renderAuthNav() {
   if (!slots.length) return null;
   const user = await getCurrentUser();
   const html = user
-    ? `<a class="nav-link text-white" href="/account">${escapeHtml(user.name.split(' ')[0])}</a>
-       <a class="nav-link text-white" href="/book">Book</a>
-       <button type="button" class="btn btn-sm btn-outline-light" data-logout>Logout</button>`
+    ? `<div class="user-menu">
+         <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true">
+           ${escapeHtml(user.name.split(' ')[0])}
+           <span class="user-menu-caret" aria-hidden="true"></span>
+         </button>
+         <ul class="user-menu-list" role="menu">
+           <li role="none"><a role="menuitem" href="/account?tab=bookings">My Booking</a></li>
+           <li role="none"><a role="menuitem" href="/account?tab=profile">Profile</a></li>
+           <li role="none"><a role="menuitem" href="/account?tab=password">Change Password</a></li>
+           <li role="none"><button type="button" role="menuitem" data-logout>Logout</button></li>
+         </ul>
+       </div>
+       <a class="btn btn-sm btn-turf" href="/book">Book</a>`
     : `<a class="nav-link text-white" href="/availability">Availability</a>
        <a class="nav-link text-white" href="${loginUrl('/book')}">Login</a>
        <a class="btn btn-sm btn-turf" href="${loginUrl('/book')}">Book</a>`;
@@ -78,8 +88,47 @@ async function renderAuthNav() {
     el.querySelectorAll('[data-logout]').forEach((btn) => {
       btn.addEventListener('click', () => logoutUser());
     });
+    const menu = el.querySelector('.user-menu');
+    if (!menu) return;
+    const toggle = menu.querySelector('.user-menu-toggle');
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menu.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
   });
+
+  if (!window.__turfUserMenuBound) {
+    window.__turfUserMenuBound = true;
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.user-menu.open').forEach((menu) => {
+        menu.classList.remove('open');
+        const toggle = menu.querySelector('.user-menu-toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+
   return user;
+}
+
+function isValidMobile(value) {
+  return /^\d{10}$/.test(String(value || '').replace(/\D/g, ''));
+}
+
+function normalizeMobileInput(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 10);
+}
+
+function bindMobileInput(input) {
+  if (!input) return;
+  input.setAttribute('inputmode', 'numeric');
+  input.setAttribute('maxlength', '10');
+  input.setAttribute('pattern', '\\d{10}');
+  input.setAttribute('title', 'Enter a 10-digit mobile number');
+  input.addEventListener('input', () => {
+    input.value = normalizeMobileInput(input.value);
+  });
 }
 
 async function loadVenueIntoPage() {
@@ -169,5 +218,8 @@ window.TurfApp = {
   requireLoginOrRedirect,
   renderAuthNav,
   logoutUser,
-  loginUrl
+  loginUrl,
+  isValidMobile,
+  normalizeMobileInput,
+  bindMobileInput
 };

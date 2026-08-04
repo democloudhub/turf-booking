@@ -102,6 +102,9 @@ async function createBooking(payload) {
     throw err;
   }
 
+  const { assertValidMobile } = require('./users');
+  const mobileDigits = assertValidMobile(mobile);
+
   const start = Number(slotStart);
   const end = start + 1;
 
@@ -143,7 +146,7 @@ async function createBooking(payload) {
         id,
         userId,
         name.trim(),
-        mobile.trim(),
+        mobileDigits,
         email.trim().toLowerCase(),
         bookingDate,
         start,

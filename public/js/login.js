@@ -1,5 +1,5 @@
 (async function () {
-  const { api, qs, showAlert, loadVenueIntoPage, renderAuthNav, getCurrentUser } = TurfApp;
+  const { api, qs, showAlert, loadVenueIntoPage, renderAuthNav, getCurrentUser, isValidMobile, bindMobileInput } = TurfApp;
   await loadVenueIntoPage();
   const user = await getCurrentUser();
   await renderAuthNav();
@@ -9,6 +9,8 @@
     window.location.replace(next.startsWith('/') ? next : '/book');
     return;
   }
+
+  bindMobileInput(document.getElementById('regMobile'));
 
   document.querySelectorAll('[data-mode]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -43,12 +45,17 @@
     e.preventDefault();
     const alertBox = document.getElementById('alertBox');
     alertBox.innerHTML = '';
+    const mobile = document.getElementById('regMobile').value.trim();
+    if (!isValidMobile(mobile)) {
+      showAlert(alertBox, 'Mobile number must be exactly 10 digits.');
+      return;
+    }
     try {
       await api('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({
           name: document.getElementById('regName').value.trim(),
-          mobile: document.getElementById('regMobile').value.trim(),
+          mobile,
           email: document.getElementById('regEmail').value.trim(),
           password: document.getElementById('regPassword').value
         })

@@ -4,6 +4,7 @@ const {
   authenticateUser,
   findUserById,
   updateUserProfile,
+  changeUserPassword,
   mapUser
 } = require('../users');
 const {
@@ -72,6 +73,19 @@ router.put('/me', requireUser, async (req, res) => {
     res.json({ user });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Failed to update profile' });
+  }
+});
+
+router.post('/change-password', requireUser, async (req, res) => {
+  try {
+    await changeUserPassword(
+      req.user.userId,
+      req.body.currentPassword,
+      req.body.newPassword
+    );
+    res.json({ ok: true, message: 'Password updated' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Failed to change password' });
   }
 });
 

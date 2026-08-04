@@ -7,7 +7,10 @@
     loadVenueIntoPage,
     showAlert,
     requireLoginOrRedirect,
-    renderAuthNav
+    renderAuthNav,
+    isValidMobile,
+    bindMobileInput,
+    normalizeMobileInput
   } = TurfApp;
 
   await loadVenueIntoPage();
@@ -24,8 +27,9 @@
   const alertBox = document.getElementById('alertBox');
   const submitBtn = document.getElementById('submitBtn');
 
+  bindMobileInput(form.mobile);
   form.name.value = user.name;
-  form.mobile.value = user.mobile;
+  form.mobile.value = normalizeMobileInput(user.mobile);
   form.email.value = user.email;
   form.email.readOnly = true;
 
@@ -85,12 +89,17 @@
       showAlert(alertBox, 'Please select an available slot.');
       return;
     }
+    const mobile = form.mobile.value.trim();
+    if (!isValidMobile(mobile)) {
+      showAlert(alertBox, 'Mobile number must be exactly 10 digits.');
+      return;
+    }
     submitBtn.disabled = true;
     submitBtn.textContent = 'Booking…';
     try {
       const payload = {
         name: form.name.value.trim(),
-        mobile: form.mobile.value.trim(),
+        mobile,
         bookingDate: form.bookingDate.value,
         slotStart: Number(form.slotStart.value),
         notes: form.notes.value.trim()
