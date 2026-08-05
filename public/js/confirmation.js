@@ -133,6 +133,8 @@
       document.getElementById('adminCheckinBtn').disabled = !canAct || Boolean(b.checkedIn);
       document.getElementById('adminCancelBtn').disabled = !canAct;
       document.getElementById('adminCheckinBtn').textContent = b.checkedIn ? 'Already checked in' : 'Check-in';
+      if(b.checkedIn)
+        document.getElementById('adminCancelBtn').style.display = none;
     } else {
       customerActions.hidden = false;
       adminActions.hidden = true;
