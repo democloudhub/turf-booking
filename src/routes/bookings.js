@@ -59,14 +59,35 @@ router.post('/', requireUser, async (req, res) => {
   }
 });
 
+function isBookingOwner(booking, user) {
+  if (!booking || !user) return false;
+  if (booking.userId && booking.userId === user.userId) return true;
+  // Fallback for older rows that may lack user_id
+  if (
+    booking.email &&
+    user.email &&
+    String(booking.email).toLowerCase() === String(user.email).toLowerCase()
+  ) {
+    return true;
+  }
+  return false;
+}
+
 router.get('/:id', optionalAdmin, optionalUser, async (req, res) => {
   try {
     const booking = await getBookingById(req.params.id);
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
-    const isAdmin = Boolean(req.admin);
-    const isOwner = Boolean(req.user && booking.userId === req.user.userId);
+    // Admin access only when explicitly requested (?view=admin) — prevents an
+    // admin cookie from unlocking every booking on the customer confirmation page.
+    const adminView = String(req.query.view || '') === 'admin';
+    const isAdmin = Boolean(req.admin) && adminView;
+    const isOwner = isBookingOwner(booking, req.user);
+
+    if (adminView && !req.admin) {
+      return res.status(401).json({ error: 'Admin login required', code: 'ADMIN_LOGIN_REQUIRED' });
+    }
     if (!isAdmin && !isOwner) {
       if (!req.user) {
         return res.status(401).json({ error: 'Please log in to continue', code: 'LOGIN_REQUIRED' });
@@ -91,8 +112,12 @@ router.get('/:id/receipt.pdf', optionalAdmin, optionalUser, async (req, res) => 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
-    const isAdmin = Boolean(req.admin);
-    const isOwner = Boolean(req.user && booking.userId === req.user.userId);
+    const adminView = String(req.query.view || '') === 'admin';
+    const isAdmin = Boolean(req.admin) && adminView;
+    const isOwner = isBookingOwner(booking, req.user);
+    if (adminView && !req.admin) {
+      return res.status(401).json({ error: 'Admin login required', code: 'ADMIN_LOGIN_REQUIRED' });
+    }
     if (!isAdmin && !isOwner) {
       if (!req.user) {
         return res.status(401).json({ error: 'Please log in to continue', code: 'LOGIN_REQUIRED' });

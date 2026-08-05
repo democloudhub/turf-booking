@@ -6,6 +6,8 @@
   const id = qs('id');
   const alertBox = document.getElementById('alertBox');
   const card = document.getElementById('confirmCard');
+  const authNav = document.querySelector('[data-auth-nav]');
+  const brandLink = document.querySelector('.navbar-brand');
 
   if (!id) {
     await renderAuthNav();
@@ -13,7 +15,8 @@
     return;
   }
 
-  const next = `/confirmation?id=${encodeURIComponent(id)}${qs('from') === 'admin' ? '&from=admin' : ''}`;
+  const fromAdminLink = qs('from') === 'admin';
+  const next = `/confirmation?id=${encodeURIComponent(id)}${fromAdminLink ? '&from=admin' : ''}`;
 
   async function isAdminLoggedIn() {
     try {
@@ -24,20 +27,31 @@
     }
   }
 
-  const asAdmin = await isAdminLoggedIn();
-  const fromAdminLink = qs('from') === 'admin';
-  // Check-in / Cancel are admin-only and only on admin email/list links.
-  const showAdminTools = asAdmin && fromAdminLink;
+  function renderAdminNav() {
+    if (brandLink) {
+      brandLink.setAttribute('href', '/admin');
+      brandLink.textContent = 'Turf Admin';
+    }
+    if (authNav) {
+      authNav.innerHTML = `<a class="btn btn-sm btn-outline-light" href="/admin">Back to Admin</a>`;
+    }
+  }
 
-  if (!showAdminTools) {
-    if (fromAdminLink && !asAdmin) {
-      window.location.href = `/admin?next=${encodeURIComponent(`${next}&from=admin`)}`;
+  let showAdminTools = false;
+
+  if (fromAdminLink) {
+    // Admin confirmation (QR / admin email / bookings list) — never customer login.
+    const asAdmin = await isAdminLoggedIn();
+    if (!asAdmin) {
+      window.location.href = `/admin?next=${encodeURIComponent(next)}`;
       return;
     }
+    showAdminTools = true;
+    renderAdminNav();
+  } else {
+    // Customer confirmation — must be the owning customer.
     const user = await requireLoginOrRedirect(next);
     if (!user) return;
-    await renderAuthNav();
-  } else {
     await renderAuthNav();
   }
 
@@ -78,7 +92,9 @@
     const paymentRow = document.getElementById('cPaymentRow');
     if (b.checkedIn && (b.discount > 0 || b.amountReceived != null || b.paymentMode)) {
       document.getElementById('cDiscount').textContent = formatMoney(b.discount || 0);
-      document.getElementById('cReceived').textContent = formatMoney(b.amountReceived != null ? b.amountReceived : b.amount);
+      document.getElementById('cReceived').textContent = formatMoney(
+        b.amountReceived != null ? b.amountReceived : b.amount
+      );
       document.getElementById('cPayment').textContent = paymentModeLabel(b.paymentMode);
       discountRow.hidden = false;
       receivedRow.hidden = false;
@@ -90,7 +106,8 @@
     }
 
     document.getElementById('qrImage').src = data.qrDataUrl;
-    document.getElementById('pdfBtn').href = `/api/bookings/${encodeURIComponent(b.id)}/receipt.pdf`;
+    const pdfQuery = showAdminTools ? '?view=admin' : '';
+    document.getElementById('pdfBtn').href = `/api/bookings/${encodeURIComponent(b.id)}/receipt.pdf${pdfQuery}`;
 
     const reasonRow = document.getElementById('cancelReasonRow');
     const reasonEl = document.getElementById('cCancelReason');
@@ -125,7 +142,6 @@
     }
 
     if (showAdminTools) {
-      // Admin view: Check-in / Cancel / Back to Admin only — no PDF download.
       customerActions.hidden = true;
       adminActions.hidden = false;
       pdfBtn.hidden = true;
@@ -155,7 +171,8 @@
   }
 
   async function loadBooking() {
-    const data = await api(`/api/bookings/${encodeURIComponent(id)}`);
+    const viewQ = showAdminTools ? '?view=admin' : '';
+    const data = await api(`/api/bookings/${encodeURIComponent(id)}${viewQ}`);
     sessionStorage.setItem(`booking:${id}`, JSON.stringify(data));
     renderBooking(data);
   }
@@ -163,7 +180,7 @@
   try {
     await loadBooking();
   } catch (err) {
-    if ((err.code === 'LOGIN_REQUIRED' || err.status === 401) && qs('from') === 'admin') {
+    if (err.code === 'ADMIN_LOGIN_REQUIRED' || (fromAdminLink && (err.code === 'LOGIN_REQUIRED' || err.status === 401))) {
       window.location.href = `/admin?next=${encodeURIComponent(next)}`;
       return;
     }

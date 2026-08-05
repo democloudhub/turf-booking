@@ -474,8 +474,9 @@
           : b.status === 'cancelled'
             ? '<span class="badge text-bg-secondary">Cancelled</span>'
             : '<span class="badge text-bg-primary">Confirmed</span>';
-        const actions =
-          b.status === 'cancelled'
+        
+            const actions =
+          b.status === 'cancelled' || b.status === 'checked-in'
             ? `<a class="btn btn-sm btn-outline-secondary" href="/confirmation?id=${encodeURIComponent(b.id)}&from=admin">View</a>`
             : `<a class="btn btn-sm btn-outline-secondary me-1" href="/confirmation?id=${encodeURIComponent(b.id)}&from=admin">View</a>
                <button class="btn btn-sm btn-outline-success me-1" data-checkin="${escapeHtml(b.id)}">Check-in</button>

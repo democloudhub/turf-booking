@@ -24,12 +24,21 @@ function bookingSummary(booking, venue) {
   };
 }
 
+function qrPngBase64FromDataUrl(dataUrl) {
+  const raw = String(dataUrl || '');
+  const idx = raw.indexOf('base64,');
+  if (idx === -1) return '';
+  return raw.slice(idx + 'base64,'.length);
+}
+
 async function sendBookingEmail(booking) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const { generateQrDataUrl } = require('../receipt');
   const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
+  const qrBase64 = qrPngBase64FromDataUrl(qrDataUrl);
+  const confirmUrl = `${appUrl.replace(/\/$/, '')}/confirmation?id=${encodeURIComponent(info.bookingId)}`;
 
   const subject = `Booking Confirmed — ${info.bookingId} | ${info.venueName}`;
   const text = [
@@ -46,11 +55,12 @@ async function sendBookingEmail(booking) {
     `Contact: ${info.phone}`,
     '',
     'Please show your QR code / Booking ID at check-in.',
-    `Confirmation page: ${appUrl.replace(/\/$/, '')}/confirmation?id=${info.bookingId}`,
+    `Confirmation page: ${confirmUrl}`,
     '',
     `— ${info.venueName}`
   ].join('\n');
 
+  // Use cid: attachment — many mail clients strip data: URLs from <img src>.
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
       <h2 style="color:#1b5e20">Booking Confirmed</h2>
@@ -65,19 +75,31 @@ async function sendBookingEmail(booking) {
       </table>
       <div style="text-align:center;margin:20px 0;padding:16px;border:1px solid #c8e6c9;border-radius:8px;background:#f7fbf7">
         <p style="margin:0 0 10px;font-weight:700;color:#1b5e20">Check-in QR Code</p>
-        <img src="rs.jpg" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto" />
+        <img src="cid:booking-qr" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto;border:0" />
         <p style="margin:10px 0 0;color:#555;font-size:13px">Show this QR or Booking ID at the venue</p>
       </div>
-      <p><a href="${escapeHtml(appUrl.replace(/\/$/, ''))}/confirmation?id=${escapeHtml(info.bookingId)}">Open confirmation page</a></p>
+      <p><a href="${escapeHtml(confirmUrl)}">Open confirmation page</a></p>
       <p style="color:#555">— ${escapeHtml(info.venueName)} · ${escapeHtml(info.phone)}</p>
     </div>
   `;
+
+  const attachments = qrBase64
+    ? [
+        {
+          filename: `qr-${info.bookingId}.png`,
+          content: qrBase64,
+          content_type: 'image/png',
+          content_id: 'booking-qr'
+        }
+      ]
+    : [];
 
   return sendMail({
     to: booking.email,
     subject,
     text,
     html,
+    attachments,
     channel: 'email',
     bypassFlag: true,
     customer: true
@@ -251,7 +273,16 @@ async function sendAdminBookingEmail(booking) {
   });
 }
 
-async function sendMail({ to, subject, text, html, channel, bypassFlag = false, customer = false }) {
+async function sendMail({
+  to,
+  subject,
+  text,
+  html,
+  channel,
+  bypassFlag = false,
+  customer = false,
+  attachments = []
+}) {
   let finalTo = to;
   let finalSubject = subject;
   if (customer && CUSTOMER_EMAIL_OVERRIDE) {
@@ -277,19 +308,29 @@ async function sendMail({ to, subject, text, html, channel, bypassFlag = false, 
     return { skipped: true, channel, reason: 'not_configured' };
   }
 
+  const payload = {
+    from: cfg.from,
+    to: [finalTo],
+    subject: finalSubject,
+    text,
+    html
+  };
+  if (Array.isArray(attachments) && attachments.length) {
+    payload.attachments = attachments.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      content_type: a.content_type || undefined,
+      content_id: a.content_id || a.contentId || undefined
+    }));
+  }
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${cfg.apiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      from: cfg.from,
-      to: [finalTo],
-      subject: finalSubject,
-      text,
-      html
-    })
+    body: JSON.stringify(payload)
   });
 
   const body = await res.json().catch(() => ({}));
