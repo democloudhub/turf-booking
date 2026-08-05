@@ -69,7 +69,7 @@
     });
   }
 
-  if (tab === 'password') {
+  if (tab === 'profile') {
     document.getElementById('passwordForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       alertBox.innerHTML = '';
