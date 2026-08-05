@@ -286,74 +286,103 @@ async function resetPasswordWithToken(token, newPassword) {
 
 async function listCustomers({ q = '' } = {}) {
   const db = getDb();
-  const result = await db.execute({
-    sql: `SELECT
-            COALESCE(NULLIF(b.user_id, ''), lower(b.email), b.mobile) AS customer_key,
-            MAX(COALESCE(u.id, b.user_id)) AS user_id,
-            MAX(COALESCE(u.name, b.name)) AS name,
-            MAX(COALESCE(u.email, b.email)) AS email,
-            MAX(COALESCE(u.mobile, b.mobile)) AS mobile,
-            MAX(COALESCE(u.created_at, b.created_at)) AS created_at,
-            SUM(CASE WHEN b.status != 'cancelled' AND IFNULL(b.checked_in, 0) = 0 THEN 1 ELSE 0 END) AS confirmed,
-            SUM(CASE WHEN b.status != 'cancelled' AND IFNULL(b.checked_in, 0) = 1 THEN 1 ELSE 0 END) AS checked_in,
-            SUM(CASE WHEN b.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
-            COUNT(*) AS total_bookings,
-            COALESCE(SUM(CASE WHEN b.status != 'cancelled' THEN b.amount ELSE 0 END), 0) AS revenue
-          FROM bookings b
-          LEFT JOIN users u ON u.id = b.user_id
-          GROUP BY COALESCE(NULLIF(b.user_id, ''), lower(b.email), b.mobile)
-          ORDER BY revenue DESC, name ASC`
-  });
 
-  let customers = result.rows.map((row) => ({
-    id: row.user_id || null,
-    key: row.customer_key,
-    name: row.name || '',
-    email: row.email || '',
-    mobile: String(row.mobile || ''),
-    createdAt: row.created_at || null,
-    bookings: {
-      confirmed: Number(row.confirmed) || 0,
-      checkedIn: Number(row.checked_in) || 0,
-      cancelled: Number(row.cancelled) || 0,
-      total: Number(row.total_bookings) || 0
-    },
-    revenue: Number(row.revenue) || 0
-  }));
+  // Fetch all bookings and users separately — avoids complex GROUP BY
+  // which can trip up the libsql web client's Row proxy objects.
+  const [bookingsRes, usersRes] = await Promise.all([
+    db.execute({
+      sql: 'SELECT id, user_id, name, email, mobile, status, checked_in, amount, amount_received, created_at FROM bookings ORDER BY created_at DESC',
+      args: []
+    }),
+    db.execute({
+      sql: 'SELECT id, name, email, mobile, created_at FROM users ORDER BY created_at DESC',
+      args: []
+    })
+  ]);
 
-  // Include registered users who have never booked.
-  const usersResult = await db.execute('SELECT * FROM users ORDER BY created_at DESC');
-  const seen = new Set(
-    customers.map((c) => (c.id || '').toLowerCase()).filter(Boolean)
-  );
-  const seenEmail = new Set(customers.map((c) => String(c.email || '').toLowerCase()).filter(Boolean));
-  const seenMobile = new Set(customers.map((c) => String(c.mobile || '').replace(/\D/g, '')).filter(Boolean));
+  // Build a user map by id for quick lookup
+  const userMap = {};
+  for (const r of usersRes.rows) {
+    const uid = String(r.id || '');
+    if (uid) userMap[uid] = { id: uid, name: String(r.name || ''), email: String(r.email || ''), mobile: String(r.mobile || ''), createdAt: r.created_at || null };
+  }
 
-  for (const row of usersResult.rows) {
-    const id = String(row.id || '');
-    const email = String(row.email || '').toLowerCase();
-    const mobile = String(row.mobile || '').replace(/\D/g, '');
-    if (seen.has(id.toLowerCase()) || (email && seenEmail.has(email)) || (mobile && seenMobile.has(mobile))) {
-      continue;
+  // Aggregate bookings per customer key (user_id if present, else email, else mobile)
+  const byKey = {};
+  for (const r of bookingsRes.rows) {
+    const uid = String(r.user_id || '').trim();
+    const email = String(r.email || '').toLowerCase().trim();
+    const mobile = String(r.mobile || '').replace(/\D/g, '');
+    const key = uid || email || mobile;
+    if (!key) continue;
+
+    if (!byKey[key]) {
+      const user = uid ? userMap[uid] : null;
+      byKey[key] = {
+        id: uid || null,
+        key,
+        name: (user && user.name) || String(r.name || ''),
+        email: (user && user.email) || email,
+        mobile: (user && user.mobile) || mobile,
+        createdAt: (user && user.createdAt) || r.created_at || null,
+        bookings: { confirmed: 0, checkedIn: 0, cancelled: 0, total: 0 },
+        revenue: 0
+      };
     }
+
+    const c = byKey[key];
+    const status = String(r.status || '');
+    const checkedIn = Number(r.checked_in) === 1;
+    const amount = Number(r.amount) || 0;
+    const received = r.amount_received != null ? Number(r.amount_received) : null;
+    c.bookings.total += 1;
+    if (status === 'cancelled') {
+      c.bookings.cancelled += 1;
+    } else if (checkedIn) {
+      c.bookings.checkedIn += 1;
+      c.revenue += received != null ? received : amount;
+    } else {
+      c.bookings.confirmed += 1;
+      c.revenue += amount;
+    }
+    // Keep the most descriptive name/email/mobile from latest bookings
+    if (!c.name && r.name) c.name = String(r.name);
+    if (!c.email && email) c.email = email;
+    if (!c.mobile && mobile) c.mobile = mobile;
+  }
+
+  let customers = Object.values(byKey);
+
+  // Include registered users who have never booked
+  const seenIds = new Set(customers.map((c) => c.id).filter(Boolean));
+  const seenEmails = new Set(customers.map((c) => c.email.toLowerCase()).filter(Boolean));
+  const seenMobiles = new Set(customers.map((c) => c.mobile.replace(/\D/g, '')).filter(Boolean));
+
+  for (const u of Object.values(userMap)) {
+    const email = u.email.toLowerCase();
+    const mobile = u.mobile.replace(/\D/g, '');
+    if (seenIds.has(u.id) || (email && seenEmails.has(email)) || (mobile && seenMobiles.has(mobile))) continue;
     customers.push({
-      id,
-      key: id,
-      name: row.name || '',
-      email: row.email || '',
-      mobile: String(row.mobile || ''),
-      createdAt: row.created_at || null,
+      id: u.id,
+      key: u.id,
+      name: u.name,
+      email: u.email,
+      mobile: u.mobile,
+      createdAt: u.createdAt,
       bookings: { confirmed: 0, checkedIn: 0, cancelled: 0, total: 0 },
       revenue: 0
     });
   }
+
+  // Sort: highest revenue first, then name
+  customers.sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name));
 
   const query = String(q || '').trim().toLowerCase();
   if (query) {
     const digits = query.replace(/\D/g, '');
     customers = customers.filter((c) => {
       const hay = `${c.name} ${c.email} ${c.mobile} ${c.id || ''}`.toLowerCase();
-      return hay.includes(query) || (digits && String(c.mobile).includes(digits));
+      return hay.includes(query) || (digits && c.mobile.includes(digits));
     });
   }
 

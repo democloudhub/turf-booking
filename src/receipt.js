@@ -2,15 +2,18 @@ const QRCode = require('qrcode');
 const { getVenue, slotLabel } = require('./venue');
 
 async function generateQrDataUrl(bookingId, appUrl) {
-  const payload = JSON.stringify({
-    bookingId,
-    verifyUrl: `${appUrl.replace(/\/$/, '')}/api/bookings/${bookingId}`
-  });
-  return QRCode.toDataURL(payload, {
+  const base = String(appUrl || '').replace(/\/$/, '');
+  const url = `${base}/confirmation?id=${encodeURIComponent(bookingId)}&from=admin`;
+  return QRCode.toDataURL(url, {
     errorCorrectionLevel: 'M',
     margin: 1,
     width: 280
   });
+}
+
+function adminConfirmationUrl(bookingId, appUrl) {
+  const base = String(appUrl || '').replace(/\/$/, '');
+  return `${base}/confirmation?id=${encodeURIComponent(bookingId)}&from=admin`;
 }
 
 async function buildReceiptPdf(booking) {
@@ -45,8 +48,15 @@ async function buildReceiptPdf(booking) {
       ['Slot', slot],
       ['Amount', `INR ${booking.amount}`],
       ['Status', booking.status],
+      booking.checkedIn && booking.amountReceived != null
+        ? ['Amount received', `INR ${booking.amountReceived}`]
+        : null,
+      booking.checkedIn && booking.discount ? ['Discount', `INR ${booking.discount}`] : null,
+      booking.checkedIn && booking.paymentMode
+        ? ['Payment mode', String(booking.paymentMode).toUpperCase()]
+        : null,
       ['Notes', booking.notes || '—']
-    ];
+    ].filter(Boolean);
 
     rows.forEach(([label, value]) => {
       doc.fontSize(11).fillColor('#666').text(label, { continued: false });
@@ -67,4 +77,4 @@ async function buildReceiptPdf(booking) {
   });
 }
 
-module.exports = { generateQrDataUrl, buildReceiptPdf };
+module.exports = { generateQrDataUrl, adminConfirmationUrl, buildReceiptPdf };

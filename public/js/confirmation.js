@@ -43,6 +43,11 @@
 
   let currentBooking = null;
 
+  function paymentModeLabel(mode) {
+    const labels = { cash: 'Cash', upi: 'UPI', card: 'Card', other: 'Other' };
+    return labels[String(mode || '').toLowerCase()] || mode || '—';
+  }
+
   function renderBooking(data) {
     const b = data.booking;
     currentBooking = b;
@@ -67,6 +72,23 @@
     document.getElementById('cSlot').textContent = b.slotLabel;
     document.getElementById('cAmount').textContent = formatMoney(b.amount);
     document.getElementById('cMobile').textContent = b.mobile;
+
+    const discountRow = document.getElementById('cDiscountRow');
+    const receivedRow = document.getElementById('cReceivedRow');
+    const paymentRow = document.getElementById('cPaymentRow');
+    if (b.checkedIn && (b.discount > 0 || b.amountReceived != null || b.paymentMode)) {
+      document.getElementById('cDiscount').textContent = formatMoney(b.discount || 0);
+      document.getElementById('cReceived').textContent = formatMoney(b.amountReceived != null ? b.amountReceived : b.amount);
+      document.getElementById('cPayment').textContent = paymentModeLabel(b.paymentMode);
+      discountRow.hidden = false;
+      receivedRow.hidden = false;
+      paymentRow.hidden = false;
+    } else {
+      discountRow.hidden = true;
+      receivedRow.hidden = true;
+      paymentRow.hidden = true;
+    }
+
     document.getElementById('qrImage').src = data.qrDataUrl;
     document.getElementById('pdfBtn').href = `/api/bookings/${encodeURIComponent(b.id)}/receipt.pdf`;
 
@@ -92,7 +114,9 @@
         : 'This booking was cancelled.';
     } else if (b.checkedIn) {
       qrWrap.hidden = false;
-      document.getElementById('confirmHint').textContent = 'Checked in at the venue.';
+      const paid = b.amountReceived != null ? formatMoney(b.amountReceived) : formatMoney(b.amount);
+      const mode = b.paymentMode ? ` · ${paymentModeLabel(b.paymentMode)}` : '';
+      document.getElementById('confirmHint').textContent = `Checked in at the venue. Received ${paid}${mode}.`;
     } else {
       qrWrap.hidden = false;
       document.getElementById('confirmHint').textContent = showAdminTools
@@ -150,6 +174,16 @@
 
   if (!showAdminTools) return;
 
+  const checkinModal = TurfCheckinModal.init({
+    api,
+    showAlert,
+    formatMoney,
+    alertBox,
+    onSuccess: async () => {
+      await loadBooking();
+    }
+  });
+
   const cancelModal = document.getElementById('cancelModal');
   const cancelReasonInput = document.getElementById('cancelReasonInput');
 
@@ -173,23 +207,9 @@
     if (e.key === 'Escape' && !cancelModal.hidden) closeCancelModal();
   });
 
-  document.getElementById('adminCheckinBtn').addEventListener('click', async () => {
+  document.getElementById('adminCheckinBtn').addEventListener('click', () => {
     if (!currentBooking) return;
-    try {
-      const result = await api(`/api/admin/bookings/${currentBooking.id}/check-in`, {
-        method: 'POST',
-        body: JSON.stringify({ checkedIn: true })
-      });
-      const parts = (result.notifications || []).map((n) => {
-        if (n.skipped) return `${n.channel}: skipped`;
-        if (n.ok) return `${n.channel}: sent`;
-        return `${n.channel}: failed`;
-      });
-      showAlert(alertBox, `Checked in. Notifications — ${parts.join(' · ') || 'none'}`, 'success');
-      await loadBooking();
-    } catch (err) {
-      showAlert(alertBox, err.message);
-    }
+    checkinModal.openCheckinModal(currentBooking);
   });
 
   document.getElementById('adminCancelBtn').addEventListener('click', () => openCancelModal());

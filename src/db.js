@@ -157,6 +157,19 @@ async function ensureSchema() {
     /* column already exists */
   }
 
+  for (const col of [
+    'ALTER TABLE bookings ADD COLUMN discount REAL DEFAULT 0',
+    'ALTER TABLE bookings ADD COLUMN amount_received REAL',
+    'ALTER TABLE bookings ADD COLUMN payment_mode TEXT',
+    'ALTER TABLE bookings ADD COLUMN checked_in_at TEXT'
+  ]) {
+    try {
+      await db.execute(col);
+    } catch {
+      /* column already exists */
+    }
+  }
+
   await db.execute(`
     CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id)
   `);

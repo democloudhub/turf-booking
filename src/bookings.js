@@ -107,7 +107,8 @@ async function createBooking(payload) {
     email,
     bookingDate,
     slotStart,
-    notes = ''
+    notes = '',
+    customAmount = null
   } = payload;
 
   if (!name || !mobile || !email || !bookingDate || slotStart == null) {
@@ -147,6 +148,16 @@ async function createBooking(payload) {
 
   const id = `TB-${require('crypto').randomBytes(4).toString('hex').toUpperCase()}`;
   const pricing = getPriceForDate(venue, bookingDate);
+  let amount = pricing.amount;
+  if (customAmount != null && customAmount !== '') {
+    const custom = Number(customAmount);
+    if (!Number.isFinite(custom) || custom < 0) {
+      const err = new Error('Custom price must be a valid non-negative amount');
+      err.status = 400;
+      throw err;
+    }
+    amount = custom;
+  }
   const createdAt = new Date().toISOString();
 
   const db = getDb();
@@ -179,11 +190,50 @@ async function createBooking(payload) {
   return getBookingById(id);
 }
 
-async function setCheckedIn(id, checkedIn = true) {
+async function checkInBooking(id, { amountReceived, discount, paymentMode } = {}) {
+  const existing = await getBookingById(id);
+  if (!existing) {
+    const err = new Error('Booking not found');
+    err.status = 404;
+    throw err;
+  }
+  if (existing.status === 'cancelled') {
+    const err = new Error('Cannot check in a cancelled booking');
+    err.status = 400;
+    throw err;
+  }
+
+  const validModes = ['cash', 'upi', 'card', 'other'];
+  const mode = String(paymentMode || '').trim().toLowerCase();
+  if (!validModes.includes(mode)) {
+    const err = new Error('Payment mode is required (cash, upi, card, or other)');
+    err.status = 400;
+    throw err;
+  }
+
+  const discountNum = Math.max(0, Number(discount) || 0);
+  if (discountNum > existing.amount) {
+    const err = new Error('Discount cannot exceed the booked amount');
+    err.status = 400;
+    throw err;
+  }
+
+  let received =
+    amountReceived != null && amountReceived !== ''
+      ? Number(amountReceived)
+      : Math.max(0, existing.amount - discountNum);
+  if (!Number.isFinite(received) || received < 0) {
+    const err = new Error('Amount received must be a valid non-negative number');
+    err.status = 400;
+    throw err;
+  }
+
   const db = getDb();
   const result = await db.execute({
-    sql: 'UPDATE bookings SET checked_in = ? WHERE id = ?',
-    args: [checkedIn ? 1 : 0, id]
+    sql: `UPDATE bookings
+          SET checked_in = 1, discount = ?, amount_received = ?, payment_mode = ?, checked_in_at = ?
+          WHERE id = ?`,
+    args: [discountNum, received, mode, new Date().toISOString(), id]
   });
   if (result.rowsAffected === 0) {
     const err = new Error('Booking not found');
@@ -191,6 +241,27 @@ async function setCheckedIn(id, checkedIn = true) {
     throw err;
   }
   return getBookingById(id);
+}
+
+async function setCheckedIn(id, checkedIn = true) {
+  if (!checkedIn) {
+    const db = getDb();
+    const result = await db.execute({
+      sql: `UPDATE bookings
+            SET checked_in = 0, discount = 0, amount_received = NULL, payment_mode = NULL, checked_in_at = NULL
+            WHERE id = ?`,
+      args: [id]
+    });
+    if (result.rowsAffected === 0) {
+      const err = new Error('Booking not found');
+      err.status = 404;
+      throw err;
+    }
+    return getBookingById(id);
+  }
+  const err = new Error('Use checkInBooking to mark checked-in with payment details');
+  err.status = 400;
+  throw err;
 }
 
 async function cancelBooking(id, reason = '') {
@@ -225,6 +296,10 @@ function mapBooking(row) {
     slotEnd: row.slot_end,
     slotLabel: slotLabel(row.slot_start, row.slot_end),
     amount: row.amount,
+    discount: Number(row.discount) || 0,
+    amountReceived: row.amount_received != null ? Number(row.amount_received) : null,
+    paymentMode: row.payment_mode || '',
+    checkedInAt: row.checked_in_at || null,
     notes: row.notes || '',
     status: row.status,
     checkedIn: Boolean(row.checked_in),
@@ -250,6 +325,7 @@ module.exports = {
   listBookings,
   listBookingsByUser,
   createBooking,
+  checkInBooking,
   setCheckedIn,
   cancelBooking
 };

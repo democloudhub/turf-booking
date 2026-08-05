@@ -11,8 +11,8 @@
   const adminAvatar = document.getElementById('adminAvatar');
   const ADMIN_TABS = ['bookings', 'walkin', 'checkin', 'customers', 'venue', 'account', 'notifications'];
   const PRIMARY_TABS = new Set(['bookings', 'walkin', 'checkin', 'customers']);
-  let currentCheckinId = null;
   let pendingCancelId = null;
+  let checkinModal = null;
 
   bindMobileInput(document.getElementById('adminMobile'));
   bindMobileInput(document.getElementById('walkinMobile'));
@@ -81,6 +81,7 @@
   const walkinSlotStart = document.getElementById('walkinSlotStart');
   const walkinPriceLabel = document.getElementById('walkinPriceLabel');
   const walkinTotal = document.getElementById('walkinTotal');
+  const walkinCustomPrice = document.getElementById('walkinCustomPrice');
   if (walkinDate) {
     walkinDate.min = todayISO();
     walkinDate.value = todayISO();
@@ -92,6 +93,10 @@
     walkinSlotStart.value = '';
     walkinTotal.textContent = '—';
     walkinPriceLabel.textContent = '';
+    if (walkinCustomPrice) {
+      walkinCustomPrice.value = '';
+      walkinCustomPrice.placeholder = 'Optional — overrides slot rate';
+    }
     const data = await api(`/api/admin/availability?date=${encodeURIComponent(walkinDate.value)}`);
     walkinSlotGrid.innerHTML = '';
     data.slots.forEach((slot) => {
@@ -107,6 +112,10 @@
           walkinSlotStart.value = String(slot.start);
           walkinTotal.textContent = formatMoney(slot.price);
           walkinPriceLabel.textContent = slot.priceLabel || '';
+          if (walkinCustomPrice) {
+            walkinCustomPrice.placeholder = `Standard: ${formatMoney(slot.price)}`;
+            walkinCustomPrice.value = '';
+          }
         });
       }
       walkinSlotGrid.appendChild(btn);
@@ -116,6 +125,14 @@
   if (walkinDate) {
     walkinDate.addEventListener('change', () => {
       loadWalkinSlots().catch((err) => showAlert(alertBox, err.message));
+    });
+  }
+  if (walkinCustomPrice) {
+    walkinCustomPrice.addEventListener('input', () => {
+      const raw = walkinCustomPrice.value.trim();
+      if (raw !== '' && Number.isFinite(Number(raw)) && Number(raw) >= 0) {
+        walkinTotal.textContent = formatMoney(Number(raw));
+      }
     });
   }
 
@@ -136,21 +153,31 @@
       return;
     }
     const slotStart = Number(walkinSlotStart.value);
+    const customPriceRaw = walkinCustomPrice ? walkinCustomPrice.value.trim() : '';
+    const payload = {
+      name,
+      mobile,
+      email,
+      bookingDate,
+      slotStart,
+      notes,
+      onPremise: true
+    };
+    if (customPriceRaw !== '') {
+      const custom = Number(customPriceRaw);
+      if (!Number.isFinite(custom) || custom < 0) {
+        showAlert(alertBox, 'Custom price must be a valid non-negative amount.');
+        return;
+      }
+      payload.customAmount = custom;
+    }
     const submitBtn = document.getElementById('walkinSubmitBtn');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Booking…';
     try {
       const result = await api('/api/admin/bookings', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          mobile,
-          email,
-          bookingDate,
-          slotStart,
-          notes,
-          onPremise: true
-        })
+        body: JSON.stringify(payload)
       });
       const accountNote = result.accountCreated
         ? 'New customer account created — set-password email sent.'
@@ -469,21 +496,8 @@
     body.querySelectorAll('[data-checkin]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         try {
-          const result = await api(`/api/admin/bookings/${btn.dataset.checkin}/check-in`, {
-            method: 'POST',
-            body: JSON.stringify({ checkedIn: true })
-          });
-          const parts = (result.notifications || []).map((n) => {
-            if (n.skipped) return `${n.channel}: skipped`;
-            if (n.ok) return `${n.channel}: sent`;
-            return `${n.channel}: failed`;
-          });
-          showAlert(
-            alertBox,
-            `Checked in. Notifications — ${parts.join(' · ') || 'none'}`,
-            'success'
-          );
-          loadBookings();
+          const data = await api(`/api/admin/bookings/${encodeURIComponent(btn.dataset.checkin)}`);
+          if (checkinModal) checkinModal.openCheckinModal(data.booking);
         } catch (err) {
           showAlert(alertBox, err.message);
         }
@@ -517,45 +531,26 @@
       /* plain id */
     }
     const match = value.match(/TB-[A-Z0-9]+/i);
-    return match ? match[0].toUpperCase() : value.toUpperCase();
+    if (match) return match[0].toUpperCase();
+    const urlMatch = value.match(/confirmation\?id=([^&\s]+)/i);
+    if (urlMatch) return decodeURIComponent(urlMatch[1]).toUpperCase();
+    return value.toUpperCase();
   }
 
-  document.getElementById('lookupBtn').addEventListener('click', async () => {
+  document.getElementById('lookupBtn').addEventListener('click', () => {
     alertBox.innerHTML = '';
     const id = parseBookingId(document.getElementById('checkinId').value);
-    try {
-      const data = await api(`/api/admin/bookings/${encodeURIComponent(id)}`);
-      currentCheckinId = data.booking.id;
-      document.getElementById('checkinResult').textContent = JSON.stringify(data.booking, null, 2);
-      document.getElementById('checkinBtn').disabled = data.booking.status === 'cancelled';
-    } catch (err) {
-      currentCheckinId = null;
-      document.getElementById('checkinBtn').disabled = true;
-      showAlert(alertBox, err.message);
+    if (!id) {
+      showAlert(alertBox, 'Enter a valid booking ID.');
+      return;
     }
+    window.location.href = `/confirmation?id=${encodeURIComponent(id)}&from=admin`;
   });
 
-  document.getElementById('checkinBtn').addEventListener('click', async () => {
-    if (!currentCheckinId) return;
-    try {
-      const result = await api(`/api/admin/bookings/${currentCheckinId}/check-in`, {
-        method: 'POST',
-        body: JSON.stringify({ checkedIn: true })
-      });
-      const parts = (result.notifications || []).map((n) => {
-        if (n.skipped) return `${n.channel}: skipped`;
-        if (n.ok) return `${n.channel}: sent`;
-        return `${n.channel}: failed`;
-      });
-      showAlert(
-        alertBox,
-        `Checked in ${currentCheckinId}. Notifications — ${parts.join(' · ') || 'none'}`,
-        'success'
-      );
+  document.getElementById('checkinId').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
       document.getElementById('lookupBtn').click();
-      loadBookings();
-    } catch (err) {
-      showAlert(alertBox, err.message);
     }
   });
 
@@ -787,6 +782,16 @@
 
   document.getElementById('enablePushBtn').addEventListener('click', enablePush);
   document.getElementById('disablePushBtn').addEventListener('click', disablePush);
+
+  checkinModal = TurfCheckinModal.init({
+    api,
+    showAlert,
+    formatMoney,
+    alertBox,
+    onSuccess: async () => {
+      await loadBookings();
+    }
+  });
 
   checkAuth();
 })();

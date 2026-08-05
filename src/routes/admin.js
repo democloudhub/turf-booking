@@ -13,6 +13,7 @@ const {
   setCheckedIn,
   cancelBooking,
   createBooking,
+  checkInBooking,
   getAvailability
 } = require('../bookings');
 const {
@@ -237,7 +238,8 @@ router.post('/bookings', requireAdmin, async (req, res) => {
       email: user.email,
       bookingDate: req.body.bookingDate || req.body.date,
       slotStart: req.body.slotStart,
-      notes: req.body.notes || (req.body.onPremise ? 'Walk-in / on-premise booking' : '')
+      notes: req.body.notes || (req.body.onPremise ? 'Walk-in / on-premise booking' : ''),
+      customAmount: req.body.customAmount
     });
 
     const [notifications, adminNotifications, welcome] = await Promise.all([
@@ -267,12 +269,16 @@ router.post('/bookings', requireAdmin, async (req, res) => {
 
 router.post('/bookings/:id/check-in', requireAdmin, async (req, res) => {
   try {
-    const checkedIn = req.body.checkedIn !== false;
-    const booking = await setCheckedIn(req.params.id, checkedIn);
-    let notifications = [];
-    if (checkedIn) {
-      notifications = await sendCheckedInNotification(booking);
+    if (req.body.checkedIn === false) {
+      const booking = await setCheckedIn(req.params.id, false);
+      return res.json({ booking, notifications: [] });
     }
+    const booking = await checkInBooking(req.params.id, {
+      amountReceived: req.body.amountReceived,
+      discount: req.body.discount,
+      paymentMode: req.body.paymentMode
+    });
+    const notifications = await sendCheckedInNotification(booking);
     res.json({ booking, notifications });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Check-in failed' });
