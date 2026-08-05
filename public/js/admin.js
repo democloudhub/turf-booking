@@ -180,7 +180,7 @@
         body: JSON.stringify(payload)
       });
       const accountNote = result.accountCreated
-        ? 'New customer account created — set-password email sent.'
+        ? 'New customer account created — set-password link included in the confirmation email.'
         : 'Existing customer account used.';
       showAlert(
         alertBox,

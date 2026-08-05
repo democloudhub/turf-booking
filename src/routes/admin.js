@@ -20,8 +20,7 @@ const {
   sendAllCancellations,
   sendCheckedInNotification,
   sendAllConfirmations,
-  notifyAdminNewBooking,
-  sendWelcomeWithPasswordSetup
+  notifyAdminNewBooking
 } = require('../notify');
 const { findOrCreateCustomer, findUserByMobile, mapUser, listCustomers } = require('../users');
 const { generateQrDataUrl } = require('../receipt');
@@ -242,12 +241,12 @@ router.post('/bookings', requireAdmin, async (req, res) => {
       customAmount: req.body.customAmount
     });
 
-    const [notifications, adminNotifications, welcome] = await Promise.all([
-      sendAllConfirmations(booking),
-      notifyAdminNewBooking(booking),
-      created && resetToken
-        ? sendWelcomeWithPasswordSetup(user, resetToken, booking)
-        : Promise.resolve({ skipped: true, channel: 'welcome-email', reason: 'existing_user' })
+    // New walk-in customers get a set-password link inside the confirmation email.
+    const [notifications, adminNotifications] = await Promise.all([
+      sendAllConfirmations(booking, {
+        setPasswordToken: created && resetToken ? resetToken : null
+      }),
+      notifyAdminNewBooking(booking)
     ]);
 
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
@@ -258,9 +257,9 @@ router.post('/bookings', requireAdmin, async (req, res) => {
       qrDataUrl,
       user,
       accountCreated: created,
+      setPasswordLinkIncluded: Boolean(created && resetToken),
       notifications,
-      adminNotifications,
-      welcomeNotification: welcome
+      adminNotifications
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Walk-in booking failed' });

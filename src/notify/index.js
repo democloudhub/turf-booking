@@ -133,9 +133,9 @@ function settleResults(results, channels) {
   });
 }
 
-async function sendAllConfirmations(booking) {
+async function sendAllConfirmations(booking, options = {}) {
   const results = await Promise.allSettled([
-    sendBookingEmail(booking),
+    sendBookingEmail(booking, options),
     sendBookingSms(booking),
     sendBookingWhatsApp(booking)
   ]);

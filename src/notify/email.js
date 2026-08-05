@@ -31,14 +31,18 @@ function qrPngBase64FromDataUrl(dataUrl) {
   return raw.slice(idx + 'base64,'.length);
 }
 
-async function sendBookingEmail(booking) {
+async function sendBookingEmail(booking, options = {}) {
   const venue = await getVenue();
   const info = bookingSummary(booking, venue);
-  const appUrl = process.env.APP_URL || 'http://localhost:3000';
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   const { generateQrDataUrl } = require('../receipt');
   const qrDataUrl = await generateQrDataUrl(booking.id, appUrl);
   const qrBase64 = qrPngBase64FromDataUrl(qrDataUrl);
-  const confirmUrl = `${appUrl.replace(/\/$/, '')}/confirmation?id=${encodeURIComponent(info.bookingId)}`;
+  const confirmUrl = `${appUrl}/confirmation?id=${encodeURIComponent(info.bookingId)}`;
+  const setPasswordToken = options.setPasswordToken || null;
+  const setPasswordUrl = setPasswordToken
+    ? `${appUrl}/reset-password?token=${encodeURIComponent(setPasswordToken)}`
+    : null;
 
   const subject = `Booking Confirmed — ${info.bookingId} | ${info.venueName}`;
   const text = [
@@ -56,9 +60,30 @@ async function sendBookingEmail(booking) {
     '',
     'Please show your QR code / Booking ID at check-in.',
     `Confirmation page: ${confirmUrl}`,
+    setPasswordUrl
+      ? [
+          '',
+          'An online account was created for you.',
+          `Email: ${booking.email}`,
+          'Set your password to log in and manage bookings:',
+          setPasswordUrl
+        ].join('\n')
+      : null,
     '',
     `— ${info.venueName}`
-  ].join('\n');
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  const setPasswordHtml = setPasswordUrl
+    ? `
+      <div style="margin:20px 0;padding:16px;border:1px solid #c8e6c9;border-radius:8px;background:#f7fbf7">
+        <p style="margin:0 0 8px;font-weight:700;color:#1b5e20">Set your password</p>
+        <p style="margin:0 0 12px">An account was created for you so you can manage bookings online.</p>
+        <p style="margin:0 0 12px"><strong>Email:</strong> ${escapeHtml(booking.email)}</p>
+        <p style="margin:0"><a href="${escapeHtml(setPasswordUrl)}" style="display:inline-block;padding:10px 16px;background:#1b5e20;color:#fff;text-decoration:none;border-radius:6px;font-weight:700">Set password</a></p>
+      </div>`
+    : '';
 
   // Use cid: attachment — many mail clients strip data: URLs from <img src>.
   const html = `
@@ -79,6 +104,7 @@ async function sendBookingEmail(booking) {
         <p style="margin:10px 0 0;color:#555;font-size:13px">Show this QR or Booking ID at the venue</p>
       </div>
       <p><a href="${escapeHtml(confirmUrl)}">Open confirmation page</a></p>
+      ${setPasswordHtml}
       <p style="color:#555">— ${escapeHtml(info.venueName)} · ${escapeHtml(info.phone)}</p>
     </div>
   `;
