@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
-const { ensureSchema } = require('./src/db');
+const { ensureSchema, dbDiagnostics, pingDb } = require('./src/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,8 +24,8 @@ function configErrorPage(err) {
     (err && err.cause && /ETIMEDOUT|ECONNREFUSED|ENOTFOUND/i.test(String(err.cause.code || err.cause.message || '')));
   const tip = isFetch
     ? `<p><strong>Connection tip:</strong> Env vars are present, but Vercel could not reach Turso.
-       Confirm <code>TURSO_DATABASE_URL</code> / <code>TURSO_AUTH_TOKEN</code>, and that the app uses
-       <code>@libsql/client/web</code> (HTTP) with a region near your Turso DB.</p>`
+       Confirm <code>TURSO_DATABASE_URL</code> (libsql://… or https://…) and a full <code>TURSO_AUTH_TOKEN</code>
+       (no quotes/newlines), then redeploy. Open <a href="/health">/health</a> for connection diagnostics.</p>`
     : '';
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Setup required</title>
@@ -67,7 +67,8 @@ app.use(async (req, res, next) => {
       return res.status(503).json({
         ok: false,
         error: err.message || 'Database unavailable',
-        code: err.code || 'DB_ERROR'
+        code: err.code || 'DB_ERROR',
+        ...dbDiagnostics(err)
       });
     }
     return res.status(503).type('html').send(configErrorPage(err));
@@ -120,15 +121,23 @@ app.get('/health', async (_req, res) => {
       ok: false,
       error: dbReadyError.message,
       code: dbReadyError.code || 'DB_ERROR',
-      vercel: Boolean(process.env.VERCEL),
-      hasTurso: Boolean(process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL)
+      ...dbDiagnostics(dbReadyError)
     });
   }
-  res.json({
-    ok: true,
-    vercel: Boolean(process.env.VERCEL),
-    hasTurso: Boolean(process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL)
-  });
+  try {
+    await pingDb();
+    res.json({
+      ok: true,
+      ...dbDiagnostics(null)
+    });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      error: err.message || 'Database ping failed',
+      code: err.code || 'DB_ERROR',
+      ...dbDiagnostics(err)
+    });
+  }
 });
 
 app.use((err, req, res, _next) => {
