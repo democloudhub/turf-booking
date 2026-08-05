@@ -22,7 +22,7 @@ const {
   notifyAdminNewBooking,
   sendWelcomeWithPasswordSetup
 } = require('../notify');
-const { findOrCreateCustomer, findUserByMobile, mapUser } = require('../users');
+const { findOrCreateCustomer, findUserByMobile, mapUser, listCustomers } = require('../users');
 const { generateQrDataUrl } = require('../receipt');
 const {
   getVapidPublicKey,
@@ -198,6 +198,27 @@ router.get('/customers/lookup', requireAdmin, async (req, res) => {
     res.json({ exists: true, user: mapUser(row) });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to look up customer' });
+  }
+});
+
+router.get('/customers', requireAdmin, async (req, res) => {
+  try {
+    const customers = await listCustomers({ q: req.query.q || '' });
+    const totals = customers.reduce(
+      (acc, c) => {
+        acc.customers += 1;
+        acc.confirmed += c.bookings.confirmed;
+        acc.checkedIn += c.bookings.checkedIn;
+        acc.cancelled += c.bookings.cancelled;
+        acc.bookings += c.bookings.total;
+        acc.revenue += c.revenue;
+        return acc;
+      },
+      { customers: 0, confirmed: 0, checkedIn: 0, cancelled: 0, bookings: 0, revenue: 0 }
+    );
+    res.json({ customers, totals });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to list customers' });
   }
 });
 

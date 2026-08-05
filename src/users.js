@@ -284,6 +284,82 @@ async function resetPasswordWithToken(token, newPassword) {
   return mapUser(await findUserById(row.id));
 }
 
+async function listCustomers({ q = '' } = {}) {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT
+            COALESCE(NULLIF(b.user_id, ''), lower(b.email), b.mobile) AS customer_key,
+            MAX(COALESCE(u.id, b.user_id)) AS user_id,
+            MAX(COALESCE(u.name, b.name)) AS name,
+            MAX(COALESCE(u.email, b.email)) AS email,
+            MAX(COALESCE(u.mobile, b.mobile)) AS mobile,
+            MAX(COALESCE(u.created_at, b.created_at)) AS created_at,
+            SUM(CASE WHEN b.status != 'cancelled' AND IFNULL(b.checked_in, 0) = 0 THEN 1 ELSE 0 END) AS confirmed,
+            SUM(CASE WHEN b.status != 'cancelled' AND IFNULL(b.checked_in, 0) = 1 THEN 1 ELSE 0 END) AS checked_in,
+            SUM(CASE WHEN b.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+            COUNT(*) AS total_bookings,
+            COALESCE(SUM(CASE WHEN b.status != 'cancelled' THEN b.amount ELSE 0 END), 0) AS revenue
+          FROM bookings b
+          LEFT JOIN users u ON u.id = b.user_id
+          GROUP BY COALESCE(NULLIF(b.user_id, ''), lower(b.email), b.mobile)
+          ORDER BY revenue DESC, name ASC`
+  });
+
+  let customers = result.rows.map((row) => ({
+    id: row.user_id || null,
+    key: row.customer_key,
+    name: row.name || '',
+    email: row.email || '',
+    mobile: String(row.mobile || ''),
+    createdAt: row.created_at || null,
+    bookings: {
+      confirmed: Number(row.confirmed) || 0,
+      checkedIn: Number(row.checked_in) || 0,
+      cancelled: Number(row.cancelled) || 0,
+      total: Number(row.total_bookings) || 0
+    },
+    revenue: Number(row.revenue) || 0
+  }));
+
+  // Include registered users who have never booked.
+  const usersResult = await db.execute('SELECT * FROM users ORDER BY created_at DESC');
+  const seen = new Set(
+    customers.map((c) => (c.id || '').toLowerCase()).filter(Boolean)
+  );
+  const seenEmail = new Set(customers.map((c) => String(c.email || '').toLowerCase()).filter(Boolean));
+  const seenMobile = new Set(customers.map((c) => String(c.mobile || '').replace(/\D/g, '')).filter(Boolean));
+
+  for (const row of usersResult.rows) {
+    const id = String(row.id || '');
+    const email = String(row.email || '').toLowerCase();
+    const mobile = String(row.mobile || '').replace(/\D/g, '');
+    if (seen.has(id.toLowerCase()) || (email && seenEmail.has(email)) || (mobile && seenMobile.has(mobile))) {
+      continue;
+    }
+    customers.push({
+      id,
+      key: id,
+      name: row.name || '',
+      email: row.email || '',
+      mobile: String(row.mobile || ''),
+      createdAt: row.created_at || null,
+      bookings: { confirmed: 0, checkedIn: 0, cancelled: 0, total: 0 },
+      revenue: 0
+    });
+  }
+
+  const query = String(q || '').trim().toLowerCase();
+  if (query) {
+    const digits = query.replace(/\D/g, '');
+    customers = customers.filter((c) => {
+      const hay = `${c.name} ${c.email} ${c.mobile} ${c.id || ''}`.toLowerCase();
+      return hay.includes(query) || (digits && String(c.mobile).includes(digits));
+    });
+  }
+
+  return customers;
+}
+
 module.exports = {
   registerUser,
   authenticateUser,
@@ -295,6 +371,7 @@ module.exports = {
   findOrCreateCustomer,
   createPasswordResetToken,
   resetPasswordWithToken,
+  listCustomers,
   assertValidMobile,
   mapUser
 };

@@ -11,18 +11,30 @@
   <link href="/css/style.css" rel="stylesheet">
 </head>
 <body class="admin-shell">
-  <nav class="navbar navbar-turf">
-    <div class="container">
-      <a class="navbar-brand display-font" href="/">Turf Admin</a>
-      <div class="d-flex align-items-center gap-2" id="adminNavUser" hidden>
-        <span class="admin-hello text-white" id="adminHello"></span>
-        <div class="user-menu" id="adminUserMenu">
-          <button type="button" class="user-menu-toggle" id="adminMenuToggle" aria-expanded="false" aria-haspopup="true" aria-label="Admin menu">
-            <span class="user-avatar user-avatar-admin" id="adminAvatar" aria-hidden="true"></span>
-          </button>
-          <ul class="user-menu-list" role="menu">
-            <li role="none"><button type="button" role="menuitem" id="logoutBtn">Logout</button></li>
-          </ul>
+  <nav class="navbar navbar-expand-lg navbar-turf">
+    <div class="container-fluid px-3 px-lg-4">
+      <a class="navbar-brand display-font mb-0" href="/">Turf Admin</a>
+      <div class="admin-top-bar" id="adminTopBar" hidden>
+        <div class="admin-top-tabs" role="tablist">
+          <button class="admin-nav-link active" data-tab="bookings" type="button">Bookings</button>
+          <button class="admin-nav-link" data-tab="walkin" type="button">Walk-in Book</button>
+          <button class="admin-nav-link" data-tab="checkin" type="button">QR Check-in</button>
+          <button class="admin-nav-link" data-tab="customers" type="button">Customers</button>
+        </div>
+        <div class="d-flex align-items-center gap-2 ms-auto" id="adminNavUser">
+          <span class="admin-hello text-white" id="adminHello"></span>
+          <div class="user-menu" id="adminUserMenu">
+            <button type="button" class="user-menu-toggle" id="adminMenuToggle" aria-expanded="false" aria-haspopup="true" aria-label="Admin menu">
+              <span class="user-avatar user-avatar-admin" id="adminAvatar" aria-hidden="true"></span>
+            </button>
+            <ul class="user-menu-list" role="menu">
+              <li role="none"><button type="button" role="menuitem" data-tab="venue">Venue &amp; Pricing</button></li>
+              <li role="none"><button type="button" role="menuitem" data-tab="account">Profile</button></li>
+              <li role="none"><button type="button" role="menuitem" data-tab="notifications">Notifications</button></li>
+              <li role="none"><hr class="user-menu-divider"></li>
+              <li role="none"><button type="button" role="menuitem" id="logoutBtn">Logout</button></li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -42,15 +54,6 @@
     </section>
 
     <section id="adminPanel" hidden>
-      <ul class="nav nav-pills mb-3 gap-2">
-        <li class="nav-item"><button class="nav-link active" data-tab="bookings" type="button">Bookings</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="walkin" type="button">Walk-in Book</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="checkin" type="button">QR Check-in</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="venue" type="button">Venue &amp; Pricing</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="account" type="button">Profile</button></li>
-        <li class="nav-item"><button class="nav-link" data-tab="notifications" type="button">Notifications</button></li>
-      </ul>
-
       <div id="tab-bookings">
         <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
           <div>
@@ -146,6 +149,71 @@
             <button class="btn btn-success" id="checkinBtn" type="button" disabled>Mark Checked-in</button>
           </div>
           <pre id="checkinResult" class="mt-3 small bg-light p-3 rounded"></pre>
+        </div>
+      </div>
+
+      <div id="tab-customers" hidden>
+        <div class="d-flex flex-wrap gap-2 mb-3 align-items-end justify-content-between">
+          <div>
+            <h2 class="h4 mb-1">Customers</h2>
+            <p class="text-muted mb-0 small">Bookings by status and revenue from non-cancelled bookings.</p>
+          </div>
+          <div class="d-flex flex-wrap gap-2 align-items-end">
+            <div style="min-width:220px">
+              <label class="form-label" for="customerSearch">Search</label>
+              <input type="search" id="customerSearch" class="form-control" placeholder="Name, mobile, email">
+            </div>
+            <button class="btn btn-turf" id="reloadCustomers" type="button">Apply</button>
+          </div>
+        </div>
+        <div class="row g-3 mb-3" id="customerTotals">
+          <div class="col-6 col-md">
+            <div class="stat-tile">
+              <div class="stat-label">Customers</div>
+              <div class="stat-value" id="statCustomers">0</div>
+            </div>
+          </div>
+          <div class="col-6 col-md">
+            <div class="stat-tile">
+              <div class="stat-label">Confirmed</div>
+              <div class="stat-value" id="statConfirmed">0</div>
+            </div>
+          </div>
+          <div class="col-6 col-md">
+            <div class="stat-tile">
+              <div class="stat-label">Checked-in</div>
+              <div class="stat-value" id="statCheckedIn">0</div>
+            </div>
+          </div>
+          <div class="col-6 col-md">
+            <div class="stat-tile">
+              <div class="stat-label">Cancelled</div>
+              <div class="stat-value" id="statCancelled">0</div>
+            </div>
+          </div>
+          <div class="col-12 col-md">
+            <div class="stat-tile stat-tile-revenue">
+              <div class="stat-label">Revenue</div>
+              <div class="stat-value" id="statRevenue">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive form-panel p-0">
+          <table class="table table-turf table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Mobile</th>
+                <th>Email</th>
+                <th class="text-center">Confirmed</th>
+                <th class="text-center">Checked-in</th>
+                <th class="text-center">Cancelled</th>
+                <th class="text-center">Total</th>
+                <th class="text-end">Revenue</th>
+              </tr>
+            </thead>
+            <tbody id="customersBody"></tbody>
+          </table>
         </div>
       </div>
 

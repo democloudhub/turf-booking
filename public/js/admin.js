@@ -5,9 +5,12 @@
   const loginPanel = document.getElementById('loginPanel');
   const adminPanel = document.getElementById('adminPanel');
   const logoutBtn = document.getElementById('logoutBtn');
+  const adminTopBar = document.getElementById('adminTopBar');
   const adminNavUser = document.getElementById('adminNavUser');
   const adminHello = document.getElementById('adminHello');
   const adminAvatar = document.getElementById('adminAvatar');
+  const ADMIN_TABS = ['bookings', 'walkin', 'checkin', 'customers', 'venue', 'account', 'notifications'];
+  const PRIMARY_TABS = new Set(['bookings', 'walkin', 'checkin', 'customers']);
   let currentCheckinId = null;
   let pendingCancelId = null;
 
@@ -193,7 +196,7 @@
   function showLogin() {
     loginPanel.hidden = false;
     adminPanel.hidden = true;
-    if (adminNavUser) adminNavUser.hidden = true;
+    if (adminTopBar) adminTopBar.hidden = true;
     const menu = document.getElementById('adminUserMenu');
     if (menu) menu.classList.remove('open');
   }
@@ -201,17 +204,34 @@
   function showAdmin(profile) {
     loginPanel.hidden = true;
     adminPanel.hidden = false;
+    if (adminTopBar) adminTopBar.hidden = false;
     updateAdminNav(profile);
   }
 
   function updateAdminNav(profile) {
-    if (!adminNavUser) return;
+    if (!adminHello || !adminAvatar) return;
     const name = profile && profile.name ? String(profile.name).trim() : '';
     const first = name.split(/\s+/)[0] || 'Admin';
     const initial = (name.charAt(0) || 'A').toUpperCase();
     adminHello.textContent = `Hello! ${first}`;
     adminAvatar.textContent = initial;
-    adminNavUser.hidden = false;
+  }
+
+  function switchTab(tab) {
+    if (!ADMIN_TABS.includes(tab)) return;
+    document.querySelectorAll('.admin-top-tabs [data-tab]').forEach((b) => {
+      b.classList.toggle('active', PRIMARY_TABS.has(tab) && b.dataset.tab === tab);
+    });
+    ADMIN_TABS.forEach((name) => {
+      const panel = document.getElementById(`tab-${name}`);
+      if (panel) panel.hidden = name !== tab;
+    });
+    if (tab === 'walkin') {
+      loadWalkinSlots().catch((err) => showAlert(alertBox, err.message));
+    }
+    if (tab === 'customers') {
+      loadCustomers().catch((err) => showAlert(alertBox, err.message));
+    }
   }
 
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -257,17 +277,63 @@
 
   document.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.tab;
-      ['bookings', 'walkin', 'checkin', 'venue', 'account', 'notifications'].forEach((name) => {
-        document.getElementById(`tab-${name}`).hidden = name !== tab;
-      });
-      if (tab === 'walkin') {
-        loadWalkinSlots().catch((err) => showAlert(alertBox, err.message));
+      switchTab(btn.dataset.tab);
+      if (adminMenu) {
+        adminMenu.classList.remove('open');
+        if (adminMenuToggle) adminMenuToggle.setAttribute('aria-expanded', 'false');
       }
     });
   });
+
+  async function loadCustomers() {
+    const q = document.getElementById('customerSearch')?.value.trim() || '';
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    const data = await api(`/api/admin/customers?${params.toString()}`);
+    const body = document.getElementById('customersBody');
+    const totals = data.totals || {};
+    document.getElementById('statCustomers').textContent = String(totals.customers || 0);
+    document.getElementById('statConfirmed').textContent = String(totals.confirmed || 0);
+    document.getElementById('statCheckedIn').textContent = String(totals.checkedIn || 0);
+    document.getElementById('statCancelled').textContent = String(totals.cancelled || 0);
+    document.getElementById('statRevenue').textContent = formatMoney(totals.revenue || 0);
+
+    if (!data.customers.length) {
+      body.innerHTML = '<tr><td colspan="8" class="text-muted p-3">No customers found.</td></tr>';
+      return;
+    }
+    body.innerHTML = data.customers
+      .map((c) => {
+        const b = c.bookings || {};
+        return `<tr>
+          <td class="fw-semibold">${escapeHtml(c.name || '—')}</td>
+          <td>${escapeHtml(c.mobile || '—')}</td>
+          <td>${escapeHtml(c.email || '—')}</td>
+          <td class="text-center">${b.confirmed || 0}</td>
+          <td class="text-center">${b.checkedIn || 0}</td>
+          <td class="text-center">${b.cancelled || 0}</td>
+          <td class="text-center">${b.total || 0}</td>
+          <td class="text-end fw-semibold">${formatMoney(c.revenue || 0)}</td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  const reloadCustomersBtn = document.getElementById('reloadCustomers');
+  if (reloadCustomersBtn) {
+    reloadCustomersBtn.addEventListener('click', () => {
+      loadCustomers().catch((err) => showAlert(alertBox, err.message));
+    });
+  }
+  const customerSearch = document.getElementById('customerSearch');
+  if (customerSearch) {
+    customerSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        loadCustomers().catch((err) => showAlert(alertBox, err.message));
+      }
+    });
+  }
 
   async function loadProfileForm(profile) {
     const data = profile || (await api('/api/admin/profile'));
