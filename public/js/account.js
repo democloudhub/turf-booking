@@ -109,7 +109,9 @@
           if (b.status === 'cancelled') {
             statusClass = 'cancelled';
             statusLabel = 'Cancelled';
-          } else if (b.checkedIn && b.status != 'cancelled') {
+          }
+          
+          if (b.checkedIn && b.status != 'cancelled') {
             statusClass = 'checked-in';
             statusLabel = 'Checked-In';
           }
