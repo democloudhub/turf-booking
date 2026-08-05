@@ -114,12 +114,12 @@
             statusLabel = 'Checked-In';
           }
           return `<tr>
-            <td><code>${escapeHtml(b.id)}</code></td>
+            <td><a href="/confirmation?id=${encodeURIComponent(b.id)}"><code>${escapeHtml(b.id)}</code></a></td>
             <td>${escapeHtml(b.bookingDate)}</td>
             <td>${escapeHtml(b.slotLabel)}</td>
             <td>${formatMoney(b.amount)}</td>
             <td><span class="status-block ${statusClass}">${statusLabel}</span></td>
-            <td><a href="/confirmation?id=${encodeURIComponent(b.id)}">View</a></td>
+          
           </tr>`;
         })
         .join('');
