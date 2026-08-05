@@ -1,6 +1,12 @@
 const { getVenue, slotLabel } = require('../venue');
 const { getResendConfig } = require('../settings');
 
+/** Temporary: all customer emails go here. Leave empty/unset later to send to real customers. */
+const CUSTOMER_EMAIL_OVERRIDE =
+  process.env.CUSTOMER_EMAIL_OVERRIDE !== undefined
+    ? String(process.env.CUSTOMER_EMAIL_OVERRIDE).trim()
+    : 'fredo.external@gmail.com';
+
 function notificationsEnabled() {
   return String(process.env.NOTIFY_ENABLED || 'false').toLowerCase() === 'true';
 }
@@ -73,7 +79,8 @@ async function sendBookingEmail(booking) {
     text,
     html,
     channel: 'email',
-    bypassFlag: true
+    bypassFlag: true,
+    customer: true
   });
 }
 
@@ -129,7 +136,8 @@ async function sendCancellationEmail(booking, reason) {
     text,
     html,
     channel: 'email',
-    bypassFlag: true
+    bypassFlag: true,
+    customer: true
   });
 }
 
@@ -175,7 +183,8 @@ async function sendCheckedInEmail(booking) {
     text,
     html,
     channel: 'email',
-    bypassFlag: true
+    bypassFlag: true,
+    customer: true
   });
 }
 
@@ -242,15 +251,22 @@ async function sendAdminBookingEmail(booking) {
   });
 }
 
-async function sendMail({ to, subject, text, html, channel, bypassFlag = false }) {
+async function sendMail({ to, subject, text, html, channel, bypassFlag = false, customer = false }) {
+  let finalTo = to;
+  let finalSubject = subject;
+  if (customer && CUSTOMER_EMAIL_OVERRIDE) {
+    finalSubject = `${subject} (originally to: ${to})`;
+    finalTo = CUSTOMER_EMAIL_OVERRIDE;
+  }
+
   // Customer + admin emails always attempt when Resend is configured
   // (booking confirm, cancel, check-in). SMS/WhatsApp still use NOTIFY_ENABLED.
   if (!bypassFlag && !notificationsEnabled()) {
-    console.log(`[${channel} skipped]`, { to, subject });
+    console.log(`[${channel} skipped]`, { to: finalTo, subject: finalSubject, originallyTo: to });
     return { skipped: true, channel };
   }
 
-  if (!to) {
+  if (!finalTo) {
     console.warn(`[${channel}] missing recipient`);
     return { skipped: true, channel, reason: 'no_recipient' };
   }
@@ -269,8 +285,8 @@ async function sendMail({ to, subject, text, html, channel, bypassFlag = false }
     },
     body: JSON.stringify({
       from: cfg.from,
-      to: [to],
-      subject,
+      to: [finalTo],
+      subject: finalSubject,
       text,
       html
     })
@@ -279,14 +295,24 @@ async function sendMail({ to, subject, text, html, channel, bypassFlag = false }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const message = body.message || body.error || `Resend HTTP ${res.status}`;
-    console.error(`[${channel}] Resend failed`, { to, subject, message });
+    console.error(`[${channel}] Resend failed`, {
+      to: finalTo,
+      originallyTo: to,
+      subject: finalSubject,
+      message
+    });
     const err = new Error(message);
     err.status = res.status;
     throw err;
   }
 
-  console.log(`[${channel}] sent`, { to, subject, id: body.id });
-  return { ok: true, channel, id: body.id };
+  console.log(`[${channel}] sent`, {
+    to: finalTo,
+    originallyTo: customer ? to : undefined,
+    subject: finalSubject,
+    id: body.id
+  });
+  return { ok: true, channel, id: body.id, to: finalTo, originallyTo: customer ? to : undefined };
 }
 
 function escapeHtml(str) {
@@ -362,7 +388,8 @@ async function sendWelcomeSetPasswordEmail(user, resetToken, booking) {
     text,
     html,
     channel: 'welcome-email',
-    bypassFlag: true
+    bypassFlag: true,
+    customer: true
   });
 }
 
@@ -398,7 +425,8 @@ async function sendPasswordResetEmail(user, resetToken) {
     text,
     html,
     channel: 'password-reset',
-    bypassFlag: true
+    bypassFlag: true,
+    customer: true
   });
 }
 
