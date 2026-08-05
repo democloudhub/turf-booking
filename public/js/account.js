@@ -18,7 +18,7 @@
   await renderAuthNav();
 
   const alertBox = document.getElementById('alertBox');
-  const tab = ['bookings', 'profile', 'password'].includes(qs('tab')) ? qs('tab') : 'bookings';
+  const tab = ['bookings', 'profile'].includes(qs('tab')) ? qs('tab') : 'bookings';
 
   const titles = {
     bookings: ['My Booking', 'Your bookings with live status.'],
@@ -32,7 +32,7 @@
   document.querySelectorAll('[data-account-tab]').forEach((link) => {
     link.classList.toggle('active', link.dataset.accountTab === tab);
   });
-  ['bookings', 'profile', 'password'].forEach((name) => {
+  ['bookings', 'profile'].forEach((name) => {
     document.getElementById(`tab-${name}`).hidden = name !== tab;
   });
 
