@@ -5,13 +5,44 @@ function isVercel() {
   return Boolean(process.env.VERCEL || process.env.NOW_REGION);
 }
 
+function trimEnv(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '');
+}
+
+function resolveAuthToken() {
+  return (
+    trimEnv(process.env.TURSO_AUTH_TOKEN) ||
+    trimEnv(process.env.LIBSQL_AUTH_TOKEN) ||
+    ''
+  );
+}
+
+/** Normalize Turso URLs for the HTTP web client (Vercel-compatible). */
+function normalizeRemoteUrl(raw) {
+  let url = trimEnv(raw);
+  if (!url) return '';
+  // Paste mistakes: "TURSO_DATABASE_URL=libsql://..." or trailing slash noise
+  if (url.includes('://') === false && url.includes('.turso.io')) {
+    url = `libsql://${url}`;
+  }
+  // Web client talks HTTPS; libsql:// / wss:// can fail as "fetch failed" on Vercel.
+  url = url
+    .replace(/^libsql:\/\//i, 'https://')
+    .replace(/^wss:\/\//i, 'https://')
+    .replace(/^ws:\/\//i, 'http://');
+  return url.replace(/\/+$/, '');
+}
+
 function resolveUrl() {
-  const remote =
+  const remote = normalizeRemoteUrl(
     process.env.TURSO_DATABASE_URL ||
-    process.env.LIBSQL_URL ||
-    (process.env.DATABASE_URL && !process.env.DATABASE_URL.startsWith('file:')
-      ? process.env.DATABASE_URL
-      : null);
+      process.env.LIBSQL_URL ||
+      (process.env.DATABASE_URL && !String(process.env.DATABASE_URL).startsWith('file:')
+        ? process.env.DATABASE_URL
+        : null)
+  );
 
   if (remote) {
     return remote;
@@ -39,8 +70,9 @@ function resolveUrl() {
 
 function createDbClient(url) {
   const opts = { url };
-  if (process.env.TURSO_AUTH_TOKEN) {
-    opts.authToken = process.env.TURSO_AUTH_TOKEN;
+  const authToken = resolveAuthToken();
+  if (authToken) {
+    opts.authToken = authToken;
   }
 
   // Local file DB needs the Node driver. Remote Turso on Vercel must use the
@@ -50,8 +82,48 @@ function createDbClient(url) {
     return createClient(opts);
   }
 
+  if (isVercel() && !authToken) {
+    const err = new Error(
+      'TURSO_AUTH_TOKEN is missing. Add it in Vercel → Settings → Environment Variables and redeploy.'
+    );
+    err.code = 'TURSO_AUTH_REQUIRED';
+    throw err;
+  }
+
   const { createClient } = require('@libsql/client/web');
   return createClient(opts);
+}
+
+function dbDiagnostics(err) {
+  const rawUrl = trimEnv(process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || '');
+  const url = (() => {
+    try {
+      return resolveUrl();
+    } catch {
+      return '';
+    }
+  })();
+  let host = '';
+  try {
+    host = url && !url.startsWith('file:') ? new URL(url).host : '';
+  } catch {
+    host = '';
+  }
+  const cause = err && err.cause ? err.cause : null;
+  return {
+    vercel: isVercel(),
+    region: process.env.VERCEL_REGION || null,
+    hasTursoUrl: Boolean(rawUrl),
+    hasAuthToken: Boolean(resolveAuthToken()),
+    urlScheme: rawUrl ? String(rawUrl).split('://')[0] : null,
+    normalizedScheme: url && url.includes('://') ? url.split('://')[0] : null,
+    host: host || null,
+    client: url.startsWith('file:') ? 'node' : 'web',
+    error: err && err.message ? err.message : null,
+    cause: cause
+      ? String(cause.code || cause.message || cause)
+      : null
+  };
 }
 
 let client;
@@ -68,6 +140,12 @@ function getDb() {
     }
   }
   return client;
+}
+
+async function pingDb() {
+  const db = getDb();
+  await db.execute('SELECT 1 AS ok');
+  return true;
 }
 
 async function ensureSchema() {
@@ -230,4 +308,4 @@ async function ensureSchema() {
   }
 }
 
-module.exports = { getDb, ensureSchema, isVercel };
+module.exports = { getDb, ensureSchema, isVercel, dbDiagnostics, pingDb, resolveUrl };
