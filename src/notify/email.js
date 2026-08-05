@@ -66,7 +66,7 @@ async function sendBookingEmail(booking) {
       </table>
       <div style="text-align:center;margin:20px 0;padding:16px;border:1px solid #c8e6c9;border-radius:8px;background:#f7fbf7">
         <p style="margin:0 0 10px;font-weight:700;color:#1b5e20">Check-in QR Code</p>
-        <img src="${qrDataUrl}" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto" />
+        <img src="rs.jpg" alt="Booking QR code" width="220" height="220" style="display:block;margin:0 auto" />
         <p style="margin:10px 0 0;color:#555;font-size:13px">Show this QR or Booking ID at the venue</p>
       </div>
       <p><a href="${escapeHtml(appUrl.replace(/\/$/, ''))}/confirmation?id=${escapeHtml(info.bookingId)}">Open confirmation page</a></p>
