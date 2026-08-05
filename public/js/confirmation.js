@@ -133,6 +133,7 @@
       document.getElementById('adminCheckinBtn').disabled = !canAct || Boolean(b.checkedIn);
       document.getElementById('adminCancelBtn').disabled = !canAct;
       document.getElementById('adminCheckinBtn').textContent = b.checkedIn ? 'Already checked in' : 'Check-in';
+      console.log('Booking status:', b.status, 'Checked in:', b.checkedIn, 'Can act:', canAct);
       if(b.checkedIn)
         document.getElementById('adminCancelBtn').style.display = 'none';
     } else {
