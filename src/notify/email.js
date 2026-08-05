@@ -56,6 +56,7 @@ async function sendBookingEmail(booking) {
       <h2 style="color:#1b5e20">Booking Confirmed</h2>
       <p>Hi ${escapeHtml(info.name)},</p>
       <p>Your turf booking is confirmed.</p>
+     ${ qrDataUrl}
       <table style="border-collapse:collapse;width:100%;margin:16px 0">
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.bookingId)}</td></tr>
         <tr><td style="padding:8px;border:1px solid #ddd"><strong>Venue</strong></td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(info.venueName)}</td></tr>
